@@ -1,0 +1,5 @@
+package qush
+
+func init() {
+
+}
