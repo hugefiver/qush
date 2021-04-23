@@ -10,6 +10,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"math/big"
 
 	"github.com/rs/zerolog/log"
@@ -44,9 +45,8 @@ func MarshalPriKey(pri crypto.PrivateKey) (bytes []byte, err error) {
 			}
 			return pem.EncodeToMemory(block), nil
 		}
-
 	default:
-		// For `ed25519`, `curve25519` or else
+		// For `ed25519` or else
 		cur, err := x509.MarshalPKCS8PrivateKey(v)
 		if err == nil {
 			block := &pem.Block{
@@ -60,19 +60,43 @@ func MarshalPriKey(pri crypto.PrivateKey) (bytes []byte, err error) {
 }
 
 func MarshalPubKey(pub crypto.PublicKey) (bytes []byte, err error) {
-	return x509.MarshalPKIXPublicKey(pub)
+	b, err := x509.MarshalPKIXPublicKey(pub)
+	if err != nil {
+		return nil, err
+	}
+	return pem.EncodeToMemory(&pem.Block{
+		Type:  "PUBLIC KEY",
+		Bytes: b,
+	}), nil
 }
 
 func GenTlsConfig(pub []byte, pri []byte) (*tls.Config, error) {
-	priKey, err := x509.ParsePKCS8PrivateKey(pri)
+	log.Print(pub)
+	b, r := pem.Decode(pri)
+	if b == nil {
+		log.Error().Msg("Get none private key from bytes")
+		return nil, errors.New("Wrong private key bytes ")
+	}
+	if len(r) > 0 {
+		log.Debug().Msgf("Rest of private key bytes: %v", r)
+	}
+	priKey, err := x509.ParsePKCS8PrivateKey(b.Bytes)
 	if err != nil {
-		log.Error().Msgf("Cannot parse private key")
+		log.Err(err).Msgf("Cannot parse private key")
 		return nil, err
 	}
 
-	pubKey, err := x509.ParsePKIXPublicKey(pub)
+	b, r = pem.Decode(pub)
+	if b == nil {
+		log.Error().Msg("Get none public key from bytes")
+		return nil, errors.New("Wrong public key bytes ")
+	}
+	if len(r) > 0 {
+		log.Debug().Msgf("Rest of public key bytes: %v", r)
+	}
+	pubKey, err := x509.ParsePKIXPublicKey(b.Bytes)
 	if err != nil {
-		log.Error().Msgf("Cannot parse public key")
+		log.Err(err).Msgf("Cannot parse public key")
 		return nil, err
 	}
 

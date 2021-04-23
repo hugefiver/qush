@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"io/ioutil"
@@ -40,14 +41,15 @@ func main() {
 	// if `genkey`
 	if f.GenKey {
 		path := f.KeyPath
-		if f.KeyPath == "" {
+		if path == "" {
 			path = c.HostKeyPath
 		}
+		path = util.GetPath(path)
+
 		log.Warn().Msgf("Generate host private key to %s", path)
 		err := genKey(path)
 		if err != nil {
 			log.Fatal().Msgf("Cannot generate private key: %v", err)
-			os.Exit(255)
 		}
 		return
 	}
@@ -56,48 +58,62 @@ func main() {
 	{
 		// Generate a TLS config from exist key files
 
-		path := c.HostKeyPath
+		path := util.GetPath(c.HostKeyPath)
 		file, err := os.Open(path)
 		if err != nil {
 			log.Fatal().Msgf("Open file %s failed", path)
-			os.Exit(255)
 		}
 		pri, err := ioutil.ReadAll(file)
 		if err != nil {
 			log.Fatal().Msgf("Cannot read file %s", path)
-			os.Exit(255)
 		}
 
 		path = path + ".pub"
 		file, err = os.Open(path)
 		if err != nil {
 			log.Fatal().Msgf("Open file %s failed", path)
-			os.Exit(255)
 		}
 		pub, err := ioutil.ReadAll(file)
 		if err != nil {
 			log.Fatal().Msgf("Cannot read file %s", path)
-			os.Exit(255)
 		}
 
 		tlsConfig, err = key.GenTlsConfig(pub, pri)
 		if err != nil {
-			log.Fatal().Msgf("Parse TLS config failed: ", err)
-			os.Exit(255)
+			log.Fatal().Err(err).Msgf("Parse TLS config failed")
 		}
 	}
 
-	listener, err := quic.ListenAddr(fmt.Sprintf("%v:%v", c.Addr, c.Port), tlsConfig, nil)
+	quicConfig := &quic.Config{
+		KeepAlive: true,
+	}
+	listener, err := quic.ListenAddr(fmt.Sprintf("%v:%v", c.Addr, c.Port), tlsConfig, quicConfig)
 	if err != nil {
-		log.Fatal().Msgf("QUSHD is exiting, cause can't listen at %v:%v", c.Addr, c.Port)
 		log.Err(err).Msg("")
+		log.Fatal().Msgf("QUSHD is exiting, cause can't listen at %v:%v", c.Addr, c.Port)
+	} else {
+		log.Warn().Msgf("Server is listening at %v:%v", c.Addr, c.Port)
+	}
+
+	for {
+		session, err := listener.Accept(context.Background())
+		if err != nil {
+			log.Debug().Err(err).Msg("Failed to accept a session")
+			continue
+		}
+		log.Debug().Msgf("Accepted a session from %v", session.RemoteAddr())
+		go handleSession(session)
 	}
 
 }
 
+func handleSession(session quic.Session) {
+	// TODO
+}
+
 func loadLogger(path string, lvl string, verbose int) {
 	if path != "none" {
-		dir := filepath.Dir(path)
+		dir := filepath.Dir(util.GetPath(path))
 		if _, err := os.Stat(dir); os.IsNotExist(err) {
 			err := os.MkdirAll(dir, 0775)
 			if err != nil {
@@ -114,9 +130,9 @@ func loadLogger(path string, lvl string, verbose int) {
 
 	fileLogger := logger.NewWriterFilter(fileWriter, logger.Level(lvl))
 	stdoutLogger := logger.NewWriterFilter(zerolog.ConsoleWriter{
-		Out:        os.Stdout,
+		Out:        os.Stderr,
 		NoColor:    true,
-		TimeFormat: "2006-01-02 15:04:05",
+		TimeFormat: "2006/01/02 15:04:05",
 	}, logger.LevelN(verbose))
 	muxWriter := zerolog.MultiLevelWriter(stdoutLogger, fileLogger)
 	log.Logger = zerolog.New(muxWriter).
@@ -127,8 +143,8 @@ func loadLogger(path string, lvl string, verbose int) {
 
 func genKey(path string) error {
 	dir := filepath.Dir(path)
-	if _, err := os.Stat(path); os.IsExist(err) {
-		log.Warn().Msg("Key file at %s is already exist")
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		log.Warn().Msgf("Key file at %s is already exist", path)
 	} else if _, err := os.Stat(dir); os.IsNotExist(err) {
 		err := os.MkdirAll(dir, 0640)
 		if err != nil {
@@ -141,17 +157,17 @@ func genKey(path string) error {
 		return err
 	}
 
-	priFile, err := os.OpenFile(path+".pub", os.O_RDWR|os.O_CREATE, 0600)
+	priFile, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0600)
 	if err != nil {
 		return err
 	}
-	defer func() { _ := priFile.Close() }()
+	defer func() { _ = priFile.Close() }()
 
-	pubFile, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0600)
+	pubFile, err := os.OpenFile(path+".pub", os.O_RDWR|os.O_CREATE, 0600)
 	if err != nil {
 		return err
 	}
-	defer func() { _ := pubFile.Close() }()
+	defer func() { _ = pubFile.Close() }()
 
 	priBytes, err := key.MarshalPriKey(pri)
 	if err != nil {
@@ -163,7 +179,7 @@ func genKey(path string) error {
 		return err
 	}
 
-	_, err = priFile.Write(pubBytes)
+	_, err = priFile.Write(priBytes)
 	if err != nil {
 		return err
 	}
