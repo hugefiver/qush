@@ -17,7 +17,7 @@ type (
 	Alert = qtls.Alert
 	// A Certificate is qtls.Certificate.
 	Certificate = qtls.Certificate
-	// CertificateRequestInfo contains inforamtion about a certificate request.
+	// CertificateRequestInfo contains information about a certificate request.
 	CertificateRequestInfo = qtls.CertificateRequestInfo
 	// A CipherSuiteTLS13 is a cipher suite for TLS 1.3
 	CipherSuiteTLS13 = qtls.CipherSuiteTLS13
@@ -98,6 +98,7 @@ type cipherSuiteTLS13 struct {
 	Hash   crypto.Hash
 }
 
+//noinspection
 //go:linkname cipherSuiteTLS13ByID github.com/marten-seemann/qtls-go1-16.cipherSuiteTLS13ByID
 func cipherSuiteTLS13ByID(id uint16) *cipherSuiteTLS13
 
