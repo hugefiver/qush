@@ -13,8 +13,10 @@ package agent // import "golang.org/x/crypto/ssh/agent"
 
 import (
 	"bytes"
+	"crypto"
 	"crypto/dsa"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rsa"
 	"encoding/base64"
@@ -25,10 +27,7 @@ import (
 	"math/big"
 	"sync"
 
-	"crypto"
-
 	"github.com/hugefiver/qush/ssh"
-	"golang.org/x/crypto/ed25519"
 )
 
 // SignatureFlags represent additional flags that can be passed to the signature

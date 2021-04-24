@@ -11,6 +11,14 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/hugefiver/qush/auth"
+
+	"github.com/hugefiver/qush/ssh/agent"
+
+	"github.com/hugefiver/qush/wrap"
+
+	"github.com/hugefiver/qush/ssh"
+
 	"github.com/hugefiver/qush/quic"
 
 	"github.com/hugefiver/qush/key"
@@ -27,6 +35,9 @@ import (
 
 var version = "0.0.1"
 var buildTime = "unknown"
+var serverVersion = "QuSH-0.0.1"
+
+var keyRings agent.Agent
 
 func main() {
 	f := processArgs()
@@ -55,6 +66,7 @@ func main() {
 	}
 
 	var tlsConfig *tls.Config
+	// make TLS Config
 	{
 		// Generate a TLS config from exist key files
 
@@ -102,13 +114,90 @@ func main() {
 			continue
 		}
 		log.Debug().Msgf("Accepted a session from %v", session.RemoteAddr())
-		go handleSession(session)
+		go handleQUICSession(session)
 	}
 
 }
 
-func handleSession(session quic.Session) {
-	// TODO
+func handleQUICSession(session quic.Session) {
+	if s, err := session.AcceptStream(context.Background()); err != nil {
+		addr := session.RemoteAddr()
+		log.Debug().Err(err).Msgf("Cannot accept stream from %v, connection will close", addr)
+		_ = session.CloseWithError(1, "Session closed")
+	} else {
+		serverConf := &ssh.ServerConfig{
+			Config:                      ssh.Config{},
+			MaxAuthTries:                3,
+			PasswordCallback:            auth.PasswordAuthFunc,
+			PublicKeyCallback:           nil,
+			KeyboardInteractiveCallback: nil,
+			AuthLogCallback:             nil,
+			ServerVersion:               serverVersion,
+			BannerCallback:              nil,
+		}
+
+		conn, channels, reqs, err := ssh.NewServerConn(wrap.From(s, session), serverConf)
+		if err != nil {
+			addr := session.RemoteAddr()
+			log.Info().Err(err).Msgf("Disconnected from %v", addr)
+			return
+		}
+		log.Debug().Fields(map[string]interface{}{
+			"conn":     conn,
+			"channels": channels,
+			"requests": reqs,
+		}).Msg("Information of SSH connection")
+
+		// Serve request channel
+		go ssh.DiscardRequests(reqs)
+
+		// Service the incoming Channel channel.
+		for newChannel := range channels {
+			if t := newChannel.ChannelType(); t != "session" {
+				_ = newChannel.Reject(ssh.UnknownChannelType, fmt.Sprintf("unknown channel type: %s", t))
+				continue
+			}
+
+			go handleSSHChannel(newChannel)
+			{
+				//	// Channels have a type, depending on the application level
+				//	// protocol intended. In the case of a shell, the type is
+				//	// "session" and ServerShell may be used to present a simple
+				//	// terminal interface.
+				//	if newChannel.ChannelType() != "session" {
+				//		_ = newChannel.Reject(ssh.UnknownChannelType, "unknown channel type")
+				//		continue
+				//	}
+				//	channel, requests, err := newChannel.Accept()
+				//	if err != nil {
+				//		log.Debug().Err(err).Msg("Could not accept channel")
+				//	}
+				//
+				//	// Sessions have out-of-band requests such as "shell",
+				//	// "pty-req" and "env".  Here we handle only the
+				//	// "shell" request.
+				//	go func(in <-chan *ssh.Request) {
+				//		for req := range in {
+				//			_ = req.Reply(req.Type == "shell", nil)
+				//		}
+				//	}(requests)
+				//
+				//	terminal := term.NewTerminal(channel, "> ")
+				//
+				//	go func() {
+				//		defer channel.Close()
+				//		for {
+				//			line, err := terminal.ReadLine()
+				//			if err != nil {
+				//				break
+				//			}
+				//			fmt.Println(line)
+				//		}
+				//	}()
+			}
+		}
+	}
+
 }
 
 func loadLogger(path string, lvl string, verbose int) {

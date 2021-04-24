@@ -11,8 +11,8 @@ import (
 	"bytes"
 	"testing"
 
+	"github.com/hugefiver/qush/agent"
 	"github.com/hugefiver/qush/ssh"
-	"github.com/hugefiver/qush/ssh/agent"
 )
 
 func TestAgentForward(t *testing.T) {

@@ -98,7 +98,6 @@ type cipherSuiteTLS13 struct {
 	Hash   crypto.Hash
 }
 
-//noinspection
 //go:linkname cipherSuiteTLS13ByID github.com/marten-seemann/qtls-go1-16.cipherSuiteTLS13ByID
 func cipherSuiteTLS13ByID(id uint16) *cipherSuiteTLS13
 

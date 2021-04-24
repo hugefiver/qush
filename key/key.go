@@ -71,7 +71,6 @@ func MarshalPubKey(pub crypto.PublicKey) (bytes []byte, err error) {
 }
 
 func GenTlsConfig(pub []byte, pri []byte) (*tls.Config, error) {
-	log.Print(pub)
 	b, r := pem.Decode(pri)
 	if b == nil {
 		log.Error().Msg("Get none private key from bytes")

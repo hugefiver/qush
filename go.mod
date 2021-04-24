@@ -16,6 +16,7 @@ require (
 // for github.com/hugefiver/qush/quic
 require (
 	github.com/cheekybits/genny v1.0.0
+	github.com/creack/pty v1.1.11 // indirect
 	github.com/francoispqt/gojay v1.2.13
 	github.com/golang/mock v1.5.0
 	github.com/marten-seemann/qpack v0.2.1
