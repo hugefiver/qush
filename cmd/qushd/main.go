@@ -13,8 +13,6 @@ import (
 
 	"github.com/hugefiver/qush/auth"
 
-	"github.com/hugefiver/qush/ssh/agent"
-
 	"github.com/hugefiver/qush/wrap"
 
 	"github.com/hugefiver/qush/ssh"
@@ -35,9 +33,9 @@ import (
 
 var version = "0.0.1"
 var buildTime = "unknown"
-var serverVersion = "QuSH-0.0.1"
+var serverVersion = "QUSH-0.0.1"
 
-var keyRings agent.Agent
+//var keyRings agent.Agent
 
 func main() {
 	f := processArgs()
@@ -91,6 +89,7 @@ func main() {
 		}
 
 		tlsConfig, err = key.GenTlsConfig(pub, pri)
+		tlsConfig.NextProtos = []string{"qush"}
 		if err != nil {
 			log.Fatal().Err(err).Msgf("Parse TLS config failed")
 		}
@@ -104,8 +103,32 @@ func main() {
 		log.Err(err).Msg("")
 		log.Fatal().Msgf("QUSHD is exiting, cause can't listen at %v:%v", c.Addr, c.Port)
 	} else {
-		log.Warn().Msgf("Server is listening at %v:%v", c.Addr, c.Port)
+		log.Warn().Msgf("Server is listening at UDP %v:%v", c.Addr, c.Port)
 	}
+	defer listener.Close()
+
+	// config ssh server config
+	serverConf := &ssh.ServerConfig{
+		Config:                      ssh.Config{},
+		MaxAuthTries:                3,
+		PasswordCallback:            auth.PasswordAuthFunc,
+		PublicKeyCallback:           nil,
+		KeyboardInteractiveCallback: nil,
+		AuthLogCallback:             nil,
+		ServerVersion:               serverVersion,
+		BannerCallback:              nil,
+	}
+
+	// add host key
+	k, err := key.LoadHostKey(c.HostKeyPath)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Cannot load host key")
+	}
+	hostKey, err := ssh.NewSignerFromKey(k)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Cannot parse host key")
+	}
+	serverConf.AddHostKey(hostKey)
 
 	for {
 		session, err := listener.Accept(context.Background())
@@ -114,28 +137,17 @@ func main() {
 			continue
 		}
 		log.Debug().Msgf("Accepted a session from %v", session.RemoteAddr())
-		go handleQUICSession(session)
+		go handleQUICSession(session, serverConf)
 	}
 
 }
 
-func handleQUICSession(session quic.Session) {
+func handleQUICSession(session quic.Session, serverConf *ssh.ServerConfig) {
 	if s, err := session.AcceptStream(context.Background()); err != nil {
 		addr := session.RemoteAddr()
 		log.Debug().Err(err).Msgf("Cannot accept stream from %v, connection will close", addr)
 		_ = session.CloseWithError(1, "Session closed")
 	} else {
-		serverConf := &ssh.ServerConfig{
-			Config:                      ssh.Config{},
-			MaxAuthTries:                3,
-			PasswordCallback:            auth.PasswordAuthFunc,
-			PublicKeyCallback:           nil,
-			KeyboardInteractiveCallback: nil,
-			AuthLogCallback:             nil,
-			ServerVersion:               serverVersion,
-			BannerCallback:              nil,
-		}
-
 		conn, channels, reqs, err := ssh.NewServerConn(wrap.From(s, session), serverConf)
 		if err != nil {
 			addr := session.RemoteAddr()

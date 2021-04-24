@@ -11,10 +11,17 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"errors"
+	"io/ioutil"
 	"math/big"
+	"os"
+
+	"github.com/hugefiver/qush/util"
 
 	"github.com/rs/zerolog/log"
 )
+
+//var Pri crypto.PrivateKey
+//var Pub crypto.PublicKey
 
 func CreateEd25519Key() (ed25519.PublicKey, ed25519.PrivateKey, error) {
 	return ed25519.GenerateKey(nil)
@@ -70,25 +77,47 @@ func MarshalPubKey(pub crypto.PublicKey) (bytes []byte, err error) {
 	}), nil
 }
 
+func LoadHostKey(path string) (crypto.PrivateKey, error) {
+	file, err := os.Open(util.GetPath(path))
+	if err != nil {
+		return nil, err
+	}
+
+	bytes, err := ioutil.ReadAll(file)
+	if err != nil {
+		return nil, err
+	}
+
+	b, _ := pem.Decode(bytes)
+	if b == nil {
+		return nil, errors.New("cannot parse pem file of private key")
+	}
+	key, err := x509.ParsePKCS8PrivateKey(b.Bytes)
+	if err != nil {
+		return nil, err
+	}
+	return key, nil
+}
+
 func GenTlsConfig(pub []byte, pri []byte) (*tls.Config, error) {
 	b, r := pem.Decode(pri)
 	if b == nil {
 		log.Error().Msg("Get none private key from bytes")
-		return nil, errors.New("Wrong private key bytes ")
+		return nil, errors.New("wrong private key bytes ")
 	}
 	if len(r) > 0 {
 		log.Debug().Msgf("Rest of private key bytes: %v", r)
 	}
 	priKey, err := x509.ParsePKCS8PrivateKey(b.Bytes)
 	if err != nil {
-		log.Err(err).Msgf("Cannot parse private key")
+		log.Err(err).Msgf("cannot parse private key")
 		return nil, err
 	}
 
 	b, r = pem.Decode(pub)
 	if b == nil {
 		log.Error().Msg("Get none public key from bytes")
-		return nil, errors.New("Wrong public key bytes ")
+		return nil, errors.New("wrong public key bytes ")
 	}
 	if len(r) > 0 {
 		log.Debug().Msgf("Rest of public key bytes: %v", r)
