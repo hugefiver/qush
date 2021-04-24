@@ -93,6 +93,8 @@ func main() {
 		if err != nil {
 			log.Fatal().Err(err).Msgf("Parse TLS config failed")
 		}
+
+		tlsConfig.NextProtos = []string{"qush"}
 	}
 
 	quicConfig := &quic.Config{
