@@ -94,6 +94,7 @@ func main() {
 			log.Fatal().Err(err).Msgf("Parse TLS config failed")
 		}
 
+		// set application field
 		tlsConfig.NextProtos = []string{"qush"}
 	}
 
@@ -116,7 +117,7 @@ func main() {
 		PasswordCallback:            auth.PasswordAuthFunc,
 		PublicKeyCallback:           nil,
 		KeyboardInteractiveCallback: nil,
-		AuthLogCallback:             nil,
+		AuthLogCallback:             logAuthLog,
 		ServerVersion:               serverVersion,
 		BannerCallback:              nil,
 	}
@@ -135,10 +136,10 @@ func main() {
 	for {
 		session, err := listener.Accept(context.Background())
 		if err != nil {
-			log.Debug().Err(err).Msg("Failed to accept a session")
+			log.Info().Err(err).Msg("Failed to accept a QUIC session")
 			continue
 		}
-		log.Debug().Msgf("Accepted a session from %v", session.RemoteAddr())
+		log.Info().Msgf("Accepted a QUIC session from %v", session.RemoteAddr())
 		go handleQUICSession(session, serverConf)
 	}
 
@@ -150,6 +151,7 @@ func handleQUICSession(session quic.Session, serverConf *ssh.ServerConfig) {
 		log.Debug().Err(err).Msgf("Cannot accept stream from %v, connection will close", addr)
 		_ = session.CloseWithError(1, "Session closed")
 	} else {
+		log.Debug().Msgf("Accept a QUIC stream #%d from %v", s.StreamID(), session.RemoteAddr())
 		conn, channels, reqs, err := ssh.NewServerConn(wrap.From(s, session), serverConf)
 		if err != nil {
 			addr := session.RemoteAddr()
@@ -297,6 +299,11 @@ func genKey(path string) error {
 
 func processArgs() *Flags {
 	f := ParseFlags()
+	pflag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Help of %s:\n", os.Args[0])
+		fmt.Fprintln(os.Stderr, "usages: qushd [-hvV] [--config] [--genconf] [--genkey [--keypath]]")
+		pflag.PrintDefaults()
+	}
 
 	if f.Version {
 		showVerbose()
