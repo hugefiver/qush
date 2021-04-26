@@ -16,12 +16,13 @@ require (
 // for github.com/hugefiver/qush/quic
 require (
 	github.com/cheekybits/genny v1.0.0
-	github.com/creack/pty v1.1.11 // indirect
+	github.com/creack/pty v1.1.11
 	github.com/francoispqt/gojay v1.2.13
 	github.com/golang/mock v1.5.0
 	github.com/marten-seemann/qpack v0.2.1
-	github.com/marten-seemann/qtls-go1-15 v0.1.4 // indirect
+	github.com/marten-seemann/qtls-go1-15 v0.1.4
 	github.com/marten-seemann/qtls-go1-16 v0.1.3
+	github.com/mattn/go-colorable v0.1.8 // indirect
 	github.com/onsi/ginkgo v1.14.0
 	github.com/onsi/gomega v1.10.1
 	golang.org/x/net v0.0.0-20210226172049-e18ecbb05110

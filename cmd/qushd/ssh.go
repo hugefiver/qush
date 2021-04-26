@@ -25,8 +25,10 @@ func handleSSHChannel(c ssh.NewChannel) {
 	}
 
 	shell := os.Getenv("SHELL")
+	log.Debug().Msgf("show env: SHELL=%s", shell)
 	if shell == "" {
 		shell = "sh"
+		log.Debug().Msgf("SHELL is empty, will use `%s` ", shell)
 	}
 
 	for req := range reqs {
@@ -46,6 +48,7 @@ func handleSSHChannel(c ssh.NewChannel) {
 			err := cmd.Start()
 			if err != nil {
 				log.Printf("could not start command (%s)", err)
+
 				continue
 			}
 
