@@ -133,9 +133,13 @@ func logAuthLog(conn ssh.ConnMetadata, method string, err error) {
 	switch method {
 	case "password":
 		if err != nil {
-			log.Info().Err(err).Msgf("Failed to auth user %s login from %v using %s", conn.User(), conn.RemoteAddr(), method)
+			log.Info().Err(err).
+				Msgf("Failed to auth user %s login from %v using %s",
+					conn.User(), conn.RemoteAddr(), method)
 		} else {
-			log.Info().Msgf("Succeed to auth login from %v using %s", conn.RemoteAddr(), method)
+			log.Info().
+				Msgf("Succeed to auth user %s login from %v using %s",
+					conn.User(), conn.RemoteAddr(), method)
 		}
 	default:
 		return
