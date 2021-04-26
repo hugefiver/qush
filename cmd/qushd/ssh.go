@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/binary"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -20,6 +21,7 @@ func handleSSHChannel(c ssh.NewChannel) {
 	}
 
 	pty, tty, err := gopty.Open()
+
 	if err != nil {
 		log.Debug().Err(err).Msg("cannot open pty")
 	}
@@ -40,6 +42,18 @@ func handleSSHChannel(c ssh.NewChannel) {
 			ok = true
 			command := string(req.Payload[4 : req.Payload[3]+4])
 			cmd := exec.Command(shell, []string{"-c", command}...)
+
+			//e := func(e, v string) string {
+			//	return fmt.Sprintf("%s=%s", strings.ToUpper(e), v)
+			//}
+			//envs := []string{
+			//	e("USER", os.Getenv("USER")),
+			//	e("HOME", os.Getenv("HOME")),
+			//	e("PATH", os.Getenv("PATH")),
+			//	e("PWD", os.Getenv("HOME")),
+			//}
+			//
+			//cmd.Env = envs
 
 			cmd.Stdout = channel
 			cmd.Stderr = channel
@@ -63,7 +77,14 @@ func handleSSHChannel(c ssh.NewChannel) {
 			}()
 		case "shell":
 			cmd := exec.Command(shell)
-			cmd.Env = []string{"TERM=xterm"}
+			home := os.Getenv("HOME")
+			path := os.Getenv("PATH")
+			cmd.Env = []string{
+				"TERM=xterm",
+				fmt.Sprintf("HOME=%s", home),
+				fmt.Sprintf("PWD=%s", home),
+				fmt.Sprintf("PATH=%s", path),
+			}
 			err := PtyRun(cmd, tty)
 			if err != nil {
 				log.Printf("%s", err)

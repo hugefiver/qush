@@ -351,6 +351,6 @@ func processArgs() *Flags {
 
 func showVerbose() {
 	fmt.Println("QUSH - Quick UDP Shell")
-	fmt.Printf("Version %s, build time %s \n", version, buildTime)
+	fmt.Printf("Server version %s, build time %s \n", version, buildTime)
 	fmt.Println("Author Hugefiver<i@iruri.moe> 2021")
 }

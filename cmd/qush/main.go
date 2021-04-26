@@ -11,7 +11,9 @@ import (
 	"os/signal"
 	"strings"
 
-	"github.com/onsi/ginkgo/reporters/stenographer/support/go-colorable"
+	"github.com/spf13/pflag"
+
+	"github.com/mattn/go-colorable"
 
 	"golang.org/x/term"
 
@@ -20,9 +22,26 @@ import (
 	"github.com/hugefiver/qush/wrap"
 )
 
+var version = "0.0.1"
+var buildTime = "unknown"
 var clientVersion = "QUSH-0.0.1"
 
 func main() {
+	golog.SetFlags(golog.Lmsgprefix)
+	golog.SetPrefix("[debug] ")
+
+	flags := ParseFlags()
+
+	if flags.Help {
+		pflag.Usage()
+		os.Exit(0)
+	}
+
+	if flags.Version {
+		showVerbose()
+		os.Exit(0)
+	}
+
 	tlsConfig := &tls.Config{
 		VerifyPeerCertificate:       nil,
 		VerifyConnection:            verifyConnection,
@@ -66,7 +85,7 @@ func main() {
 	}()
 
 	// connect server
-	session, err := quic.DialAddr("10.64.202.123:22", tlsConfig, quicConfig)
+	session, err := quic.DialAddr(fmt.Sprintf("%s:%d", flags.Host, flags.Port), tlsConfig, quicConfig)
 	if err != nil {
 		golog.Fatal(err)
 	}
@@ -82,7 +101,7 @@ func main() {
 	user := "test"
 	config := &ssh.ClientConfig{
 		Config: ssh.Config{},
-		User:   user,
+		User:   flags.User,
 		//Auth:              []ssh.AuthMethod{ssh.Password("test")},
 		Auth:              []ssh.AuthMethod{EnterPasswd(user)},
 		HostKeyCallback:   hostKeyConfirm,
@@ -128,17 +147,17 @@ func main() {
 	//term.NewTerminal(c, "> ")
 
 	sshSession.Stdin = os.Stdin
-	//sshSession.Stdout = os.Stdout
-	//sshSession.Stderr = os.Stdout
-	ct := colorable.NewNonColorable(os.Stdout)
+	ct := colorable.NewColorable(os.Stdout)
 	sshSession.Stdout = ct
 	sshSession.Stderr = ct
+
 	w, h, err := term.GetSize(int(os.Stdout.Fd()))
 	if err != nil {
 		golog.Printf("window size: %dx%d, err=%v \n", w, h, err)
 	} else {
 		golog.Printf("windows size: %dx%d \n", w, h)
 	}
+
 	if err := sshSession.RequestPty("xterm", h, w, ssh.TerminalModes{
 		ssh.ECHO:          0,
 		ssh.TTY_OP_ISPEED: 14400,
@@ -147,13 +166,16 @@ func main() {
 		golog.Fatalln(err)
 	}
 
-	golog.Println("gonna to run `ls` command")
-	err = sshSession.Run("ls -l")
-	//err = sshSession.Shell()
-	if err != nil {
-		golog.Fatalln(err)
+	if len(flags.Cmd) == 0 {
+		golog.Println("request a shell")
+		if err := sshSession.Shell(); err != nil {
+			golog.Fatalln(err)
+		}
+		sshSession.Wait()
+	} else {
+		sshSession.Run(strings.Join(flags.Cmd, " "))
 	}
-	//sshSession.Wait()
+
 }
 
 func verifyConnection(status tls.ConnectionState) error {
@@ -168,7 +190,6 @@ func hostKeyConfirm(hostname string, remote net.Addr, key ssh.PublicKey) error {
 	for {
 		fmt.Print("do you still want to connect(yes/no): ")
 		fmt.Scan(&in)
-		fmt.Println()
 		switch strings.ToLower(strings.TrimSpace(in)) {
 		case "yes":
 			return nil
@@ -179,4 +200,10 @@ func hostKeyConfirm(hostname string, remote net.Addr, key ssh.PublicKey) error {
 			continue
 		}
 	}
+}
+
+func showVerbose() {
+	fmt.Println("QUSH - Quick UDP Shell")
+	fmt.Printf("Client version %s, build time %s \n", version, buildTime)
+	fmt.Println("Author Hugefiver<i@iruri.moe> 2021")
 }

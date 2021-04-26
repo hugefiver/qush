@@ -13,6 +13,7 @@ func EnterPasswd(user string) ssh.AuthMethod {
 	callback := func() (string, error) {
 		fmt.Printf("Input password for %s: ", user)
 		p, err := term.ReadPassword(int(os.Stdin.Fd()))
+		fmt.Println()
 		return string(p), err
 	}
 
