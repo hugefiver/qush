@@ -113,6 +113,7 @@ func main() {
 	// config ssh server config
 	serverConf := &ssh.ServerConfig{
 		Config:                      ssh.Config{},
+		NoClientAuth:                false,
 		MaxAuthTries:                3,
 		PasswordCallback:            auth.PasswordAuthFunc,
 		PublicKeyCallback:           nil,
@@ -120,6 +121,7 @@ func main() {
 		AuthLogCallback:             logAuthLog,
 		ServerVersion:               serverVersion,
 		BannerCallback:              nil,
+		GSSAPIWithMICConfig:         nil,
 	}
 
 	// add host key
