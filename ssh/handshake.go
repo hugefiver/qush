@@ -116,7 +116,7 @@ func newHandshakeTransport(conn keyingTransport, config *Config, clientVersion, 
 	t.resetWriteThresholds()
 
 	// We always start with a mandatory key exchange.
-	t.requestKex <- struct{}{}
+	//t.requestKex <- struct{}{}
 	return t
 }
 
@@ -132,7 +132,7 @@ func newClientTransport(conn keyingTransport, clientVersion, serverVersion []byt
 		t.hostKeyAlgorithms = supportedHostKeyAlgos
 	}
 	go t.readLoop()
-	go t.kexLoop()
+	//go t.kexLoop()
 	return t
 }
 
@@ -140,7 +140,7 @@ func newServerTransport(conn keyingTransport, clientVersion, serverVersion []byt
 	t := newHandshakeTransport(conn, &config.Config, clientVersion, serverVersion)
 	t.hostKeys = config.hostKeys
 	go t.readLoop()
-	go t.kexLoop()
+	//go t.kexLoop()
 	return t
 }
 
@@ -151,13 +151,15 @@ func (t *handshakeTransport) getSessionID() []byte {
 // waitSession waits for the session to be established. This should be
 // the first thing to call after instantiating handshakeTransport.
 func (t *handshakeTransport) waitSession() error {
-	p, err := t.readPacket()
+	_, err := t.readPacket()
 	if err != nil {
 		return err
 	}
-	if p[0] != msgNewKeys {
-		return fmt.Errorf("ssh: first packet should be msgNewKeys")
-	}
+
+	// no key exchange
+	//if p[0] != msgNewKeys {
+	//	return fmt.Errorf("ssh: first packet should be msgNewKeys")
+	//}
 
 	return nil
 }
@@ -392,44 +394,48 @@ func (t *handshakeTransport) readOnePacket(first bool) ([]byte, error) {
 		t.printPacket(p, false)
 	}
 
-	if first && p[0] != msgKexInit {
-		return nil, fmt.Errorf("ssh: first packet should be msgKexInit")
-	}
+	//if first && p[0] != msgKexInit {
+	//	return nil, fmt.Errorf("ssh: first packet should be msgKexInit")
+	//}
 
 	if p[0] != msgKexInit {
 		return p, nil
 	}
 
-	firstKex := t.sessionID == nil
+	return []byte{msgNewKeys}, nil
 
-	kex := pendingKex{
-		done:      make(chan error, 1),
-		otherInit: p,
-	}
-	t.startKex <- &kex
-	err = <-kex.done
+	// no key exchange
 
-	if debugHandshake {
-		log.Printf("%s exited key exchange (first %v), err %v", t.id(), firstKex, err)
-	}
-
-	if err != nil {
-		return nil, err
-	}
-
-	t.resetReadThresholds()
-
-	// By default, a key exchange is hidden from higher layers by
-	// translating it into msgIgnore.
-	successPacket := []byte{msgIgnore}
-	if firstKex {
-		// sendKexInit() for the first kex waits for
-		// msgNewKeys so the authentication process is
-		// guaranteed to happen over an encrypted transport.
-		successPacket = []byte{msgNewKeys}
-	}
-
-	return successPacket, nil
+	//firstKex := t.sessionID == nil
+	//
+	//kex := pendingKex{
+	//	done:      make(chan error, 1),
+	//	otherInit: p,
+	//}
+	//t.startKex <- &kex
+	//err = <-kex.done
+	//
+	//if debugHandshake {
+	//	log.Printf("%s exited key exchange (first %v), err %v", t.id(), firstKex, err)
+	//}
+	//
+	//if err != nil {
+	//	return nil, err
+	//}
+	//
+	//t.resetReadThresholds()
+	//
+	//// By default, a key exchange is hidden from higher layers by
+	//// translating it into msgIgnore.
+	//successPacket := []byte{msgIgnore}
+	//if firstKex {
+	//	// sendKexInit() for the first kex waits for
+	//	// msgNewKeys so the authentication process is
+	//	// guaranteed to happen over an encrypted transport.
+	//	successPacket = []byte{msgNewKeys}
+	//}
+	//
+	//return successPacket, nil
 }
 
 // sendKexInit sends a key change message.
@@ -493,24 +499,25 @@ func (t *handshakeTransport) writePacket(p []byte) error {
 		return t.writeError
 	}
 
-	if t.sentInitMsg != nil {
-		// Copy the packet so the writer can reuse the buffer.
-		cp := make([]byte, len(p))
-		copy(cp, p)
-		t.pendingPackets = append(t.pendingPackets, cp)
-		return nil
-	}
+	// no key exchange
+	//if t.sentInitMsg != nil {
+	//	// Copy the packet so the writer can reuse the buffer.
+	//	cp := make([]byte, len(p))
+	//	copy(cp, p)
+	//	t.pendingPackets = append(t.pendingPackets, cp)
+	//	return nil
+	//}
 
 	if t.writeBytesLeft > 0 {
 		t.writeBytesLeft -= int64(len(p))
 	} else {
-		t.requestKeyExchange()
+		//t.requestKeyExchange()
 	}
 
 	if t.writePacketsLeft > 0 {
 		t.writePacketsLeft--
 	} else {
-		t.requestKeyExchange()
+		//t.requestKeyExchange()
 	}
 
 	if err := t.pushPacket(p); err != nil {

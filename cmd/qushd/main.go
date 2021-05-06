@@ -11,6 +11,8 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/hugefiver/qush/consits"
+
 	"github.com/hugefiver/qush/auth"
 
 	"github.com/hugefiver/qush/wrap"
@@ -148,6 +150,7 @@ func main() {
 }
 
 func handleQUICSession(session quic.Session, serverConf *ssh.ServerConfig) {
+	defer session.CloseWithError(consits.DISCONNECT, "server disconnected")
 	if s, err := session.AcceptStream(context.Background()); err != nil {
 		addr := session.RemoteAddr()
 		log.Debug().Err(err).Msgf("Cannot accept stream from %v, connection will close", addr)

@@ -11,6 +11,8 @@ import (
 	"io"
 	"net"
 	"strings"
+
+	"github.com/hugefiver/qush/wrap"
 )
 
 // The Permissions type holds fine-grained permissions that are
@@ -187,7 +189,7 @@ type ServerConn struct {
 //
 // The returned error may be of type *ServerAuthError for
 // authentication errors.
-func NewServerConn(c net.Conn, config *ServerConfig) (*ServerConn, <-chan NewChannel, <-chan *Request, error) {
+func NewServerConn(c wrap.Conn, config *ServerConfig) (*ServerConn, <-chan NewChannel, <-chan *Request, error) {
 	fullConf := *config
 	fullConf.SetDefaults()
 	if fullConf.MaxAuthTries == 0 {
@@ -223,10 +225,13 @@ func signAndMarshal(k Signer, rand io.Reader, data []byte) ([]byte, error) {
 }
 
 // handshake performs key exchange and user authentication.
-func (s *connection) serverHandshake(config *ServerConfig) (*Permissions, error) {
-	if len(config.hostKeys) == 0 {
-		return nil, errors.New("ssh: server has no host keys")
-	}
+func (c *connection) serverHandshake(config *ServerConfig) (*Permissions, error) {
+	// transport security is offered by quic
+	// no need ssh host key
+	//
+	//if len(config.hostKeys) == 0 {
+	//	return nil, errors.New("ssh: server has no host keys")
+	//}
 
 	if !config.NoClientAuth && config.PasswordCallback == nil && config.PublicKeyCallback == nil &&
 		config.KeyboardInteractiveCallback == nil && (config.GSSAPIWithMICConfig == nil ||
@@ -235,28 +240,28 @@ func (s *connection) serverHandshake(config *ServerConfig) (*Permissions, error)
 	}
 
 	if config.ServerVersion != "" {
-		s.serverVersion = []byte(config.ServerVersion)
+		c.serverVersion = []byte(config.ServerVersion)
 	} else {
-		s.serverVersion = []byte(packageVersion)
+		c.serverVersion = []byte(packageVersion)
 	}
 	var err error
-	s.clientVersion, err = exchangeVersions(s.sshConn.conn, s.serverVersion)
+	c.clientVersion, err = exchangeVersions(c.sshConn.conn, c.serverVersion)
 	if err != nil {
 		return nil, err
 	}
 
-	tr := newTransport(s.sshConn.conn, config.Rand, false /* not client */)
-	s.transport = newServerTransport(tr, s.clientVersion, s.serverVersion, config)
+	tr := newTransport(c.sshConn.conn, config.Rand, false /* not client */)
+	c.transport = newServerTransport(tr, c.clientVersion, c.serverVersion, config)
 
-	if err := s.transport.waitSession(); err != nil {
-		return nil, err
-	}
+	//if err := c.transport.waitSession(); err != nil {
+	//	return nil, err
+	//}
 
 	// We just did the key change, so the session ID is established.
-	s.sessionID = s.transport.getSessionID()
+	c.sessionID = c.transport.getSessionID()
 
 	var packet []byte
-	if packet, err = s.transport.readPacket(); err != nil {
+	if packet, err = c.transport.readPacket(); err != nil {
 		return nil, err
 	}
 
@@ -270,15 +275,15 @@ func (s *connection) serverHandshake(config *ServerConfig) (*Permissions, error)
 	serviceAccept := serviceAcceptMsg{
 		Service: serviceUserAuth,
 	}
-	if err := s.transport.writePacket(Marshal(&serviceAccept)); err != nil {
+	if err := c.transport.writePacket(Marshal(&serviceAccept)); err != nil {
 		return nil, err
 	}
 
-	perms, err := s.serverAuthenticate(config)
+	perms, err := c.serverAuthenticate(config)
 	if err != nil {
 		return nil, err
 	}
-	s.mux = newMux(s.transport)
+	c.mux = newMux(c.transport)
 	return perms, err
 }
 
@@ -395,8 +400,8 @@ func (l ServerAuthError) Error() string {
 // It is returned in ServerAuthError.Errors from NewServerConn.
 var ErrNoAuth = errors.New("ssh: no auth passed yet")
 
-func (s *connection) serverAuthenticate(config *ServerConfig) (*Permissions, error) {
-	sessionID := s.transport.getSessionID()
+func (c *connection) serverAuthenticate(config *ServerConfig) (*Permissions, error) {
+	sessionID := c.transport.getSessionID()
 	var cache pubKeyCache
 	var perms *Permissions
 
@@ -412,7 +417,7 @@ userAuthLoop:
 				Message: "too many authentication failures",
 			}
 
-			if err := s.transport.writePacket(Marshal(discMsg)); err != nil {
+			if err := c.transport.writePacket(Marshal(discMsg)); err != nil {
 				return nil, err
 			}
 
@@ -420,7 +425,7 @@ userAuthLoop:
 		}
 
 		var userAuthReq userAuthRequestMsg
-		if packet, err := s.transport.readPacket(); err != nil {
+		if packet, err := c.transport.readPacket(); err != nil {
 			if err == io.EOF {
 				return nil, &ServerAuthError{Errors: authErrs}
 			}
@@ -433,16 +438,16 @@ userAuthLoop:
 			return nil, errors.New("ssh: client attempted to negotiate for unknown service: " + userAuthReq.Service)
 		}
 
-		s.user = userAuthReq.User
+		c.user = userAuthReq.User
 
 		if !displayedBanner && config.BannerCallback != nil {
 			displayedBanner = true
-			msg := config.BannerCallback(s)
+			msg := config.BannerCallback(c)
 			if msg != "" {
 				bannerMsg := &userAuthBannerMsg{
 					Message: msg,
 				}
-				if err := s.transport.writePacket(Marshal(bannerMsg)); err != nil {
+				if err := c.transport.writePacket(Marshal(bannerMsg)); err != nil {
 					return nil, err
 				}
 			}
@@ -476,15 +481,15 @@ userAuthLoop:
 				return nil, parseError(msgUserAuthRequest)
 			}
 
-			perms, authErr = config.PasswordCallback(s, password)
+			perms, authErr = config.PasswordCallback(c, password)
 		case "keyboard-interactive":
 			if config.KeyboardInteractiveCallback == nil {
 				authErr = errors.New("ssh: keyboard-interactive auth not configured")
 				break
 			}
 
-			prompter := &sshClientKeyboardInteractive{s}
-			perms, authErr = config.KeyboardInteractiveCallback(s, prompter.Challenge)
+			prompter := &sshClientKeyboardInteractive{c}
+			perms, authErr = config.KeyboardInteractiveCallback(c, prompter.Challenge)
 		case "publickey":
 			if config.PublicKeyCallback == nil {
 				authErr = errors.New("ssh: publickey auth not configured")
@@ -516,14 +521,14 @@ userAuthLoop:
 				return nil, err
 			}
 
-			candidate, ok := cache.get(s.user, pubKeyData)
+			candidate, ok := cache.get(c.user, pubKeyData)
 			if !ok {
-				candidate.user = s.user
+				candidate.user = c.user
 				candidate.pubKeyData = pubKeyData
-				candidate.perms, candidate.result = config.PublicKeyCallback(s, pubKey)
+				candidate.perms, candidate.result = config.PublicKeyCallback(c, pubKey)
 				if candidate.result == nil && candidate.perms != nil && candidate.perms.CriticalOptions != nil && candidate.perms.CriticalOptions[sourceAddressCriticalOption] != "" {
 					candidate.result = checkSourceAddress(
-						s.RemoteAddr(),
+						c.RemoteAddr(),
 						candidate.perms.CriticalOptions[sourceAddressCriticalOption])
 				}
 				cache.add(candidate)
@@ -542,7 +547,7 @@ userAuthLoop:
 						Algo:   algo,
 						PubKey: pubKeyData,
 					}
-					if err = s.transport.writePacket(Marshal(&okMsg)); err != nil {
+					if err = c.transport.writePacket(Marshal(&okMsg)); err != nil {
 						return nil, err
 					}
 					continue userAuthLoop
@@ -599,13 +604,13 @@ userAuthLoop:
 				break
 			}
 			// Initial server response, see RFC 4462 section 3.3.
-			if err := s.transport.writePacket(Marshal(&userAuthGSSAPIResponse{
+			if err := c.transport.writePacket(Marshal(&userAuthGSSAPIResponse{
 				SupportMech: krb5OID,
 			})); err != nil {
 				return nil, err
 			}
 			// Exchange token, see RFC 4462 section 3.4.
-			packet, err := s.transport.readPacket()
+			packet, err := c.transport.readPacket()
 			if err != nil {
 				return nil, err
 			}
@@ -613,7 +618,7 @@ userAuthLoop:
 			if err := Unmarshal(packet, userAuthGSSAPITokenReq); err != nil {
 				return nil, err
 			}
-			authErr, perms, err = gssExchangeToken(gssapiConfig, userAuthGSSAPITokenReq.Token, s, sessionID,
+			authErr, perms, err = gssExchangeToken(gssapiConfig, userAuthGSSAPITokenReq.Token, c, sessionID,
 				userAuthReq)
 			if err != nil {
 				return nil, err
@@ -625,7 +630,7 @@ userAuthLoop:
 		authErrs = append(authErrs, authErr)
 
 		if config.AuthLogCallback != nil {
-			config.AuthLogCallback(s, userAuthReq.Method, authErr)
+			config.AuthLogCallback(c, userAuthReq.Method, authErr)
 		}
 
 		if authErr == nil {
@@ -653,12 +658,12 @@ userAuthLoop:
 			return nil, errors.New("ssh: no authentication methods configured but NoClientAuth is also false")
 		}
 
-		if err := s.transport.writePacket(Marshal(&failureMsg)); err != nil {
+		if err := c.transport.writePacket(Marshal(&failureMsg)); err != nil {
 			return nil, err
 		}
 	}
 
-	if err := s.transport.writePacket([]byte{msgUserAuthSuccess}); err != nil {
+	if err := c.transport.writePacket([]byte{msgUserAuthSuccess}); err != nil {
 		return nil, err
 	}
 	return perms, nil

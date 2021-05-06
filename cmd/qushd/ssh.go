@@ -40,7 +40,8 @@ func handleSSHChannel(c ssh.NewChannel) {
 		switch req.Type {
 		case "exec":
 			ok = true
-			command := string(req.Payload[4 : req.Payload[3]+4])
+			length := req.Payload[3]
+			command := string(req.Payload[4 : length+4])
 			cmd := exec.Command(shell, []string{"-c", command}...)
 
 			//e := func(e, v string) string {
@@ -110,9 +111,18 @@ func handleSSHChannel(c ssh.NewChannel) {
 
 			// We don't accept any commands (Payload),
 			// only the default shell.
-			if len(req.Payload) == 0 {
-				ok = true
+			//
+			// any other payload will be ignore
+			//
+			//if len(req.Payload) == 0 {
+			//	ok = true
+			//}
+			ok = true
+
+			if req.WantReply {
+				req.Reply(true, []byte{})
 			}
+
 		case "pty-req":
 			// Responding 'ok' here will let the client
 			// know we have a pty ready for input

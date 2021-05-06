@@ -26,6 +26,8 @@
         <method importPath="github.com/hugefiver/qush/ssh" receiver="Channel" name="Close" />
         <method importPath="os" receiver="*File" name="Close" />
         <method importPath="github.com/hugefiver/qush/quic" receiver="Listener" name="Close" />
+        <method importPath="github.com/hugefiver/qush/ssh" receiver="*Request" name="Reply" />
+        <method importPath="github.com/hugefiver/qush/quic" receiver="Session" name="CloseWithError" />
       </methods>
     </inspection_tool>
   </profile>

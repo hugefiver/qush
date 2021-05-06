@@ -11,6 +11,8 @@ import (
 	"os/signal"
 	"strings"
 
+	"github.com/hugefiver/qush/consits"
+
 	"github.com/spf13/pflag"
 
 	"github.com/mattn/go-colorable"
@@ -75,12 +77,29 @@ func main() {
 		Tracer:                         nil,
 	}
 
+	// clear closers when exist
+	var closers []func()
+	clearer := func() {
+		cs := closers
+		for _, f := range cs {
+			f()
+		}
+	}
+
+	addCloser := func(fn func()) {
+		closers = append([]func(){fn}, closers...)
+	}
+
+	defer clearer()
+
 	go func() {
 		ch := make(chan os.Signal, 1)
 		signal.Notify(ch, os.Interrupt, os.Kill)
 
 		for s := range ch {
-			golog.Fatalf("get a %s signal, program will exit.", s.String())
+			golog.Printf("get a %s signal, program will exit.", s.String())
+			clearer()
+			os.Exit(0)
 		}
 	}()
 
@@ -89,6 +108,9 @@ func main() {
 	if err != nil {
 		golog.Fatal(err)
 	}
+	addCloser(func() {
+		session.CloseWithError(consits.DISCONNECT, "program exited")
+	})
 	golog.Println("connected")
 
 	// open a QUIC stream
@@ -96,7 +118,15 @@ func main() {
 	if err != nil {
 		golog.Fatal(err)
 	}
+	addCloser(func() {
+		stream.Close()
+	})
 	golog.Println("opened a QUIC stream")
+
+	keyConfirmCallback := hostKeyConfirm
+	if flags.IgnorePubKey {
+		keyConfirmCallback = passHostKeyConfirm
+	}
 
 	user := "test"
 	config := &ssh.ClientConfig{
@@ -104,7 +134,7 @@ func main() {
 		User:   flags.User,
 		//Auth:              []ssh.AuthMethod{ssh.Password("test")},
 		Auth:              []ssh.AuthMethod{EnterPasswd(user)},
-		HostKeyCallback:   hostKeyConfirm,
+		HostKeyCallback:   keyConfirmCallback,
 		BannerCallback:    ssh.BannerDisplayStderr(),
 		ClientVersion:     clientVersion,
 		HostKeyAlgorithms: nil,
@@ -137,14 +167,6 @@ func main() {
 	//	golog.Fatalln(err)
 	//}
 	//defer term.Restore(int(os.Stdout.Fd()), oldStdoutPerm)
-
-	//ch := <-channels
-	//c, _, err := ch.Accept()
-	//if err != nil {
-	//	golog.Fatalln(err)
-	//}
-	//
-	//term.NewTerminal(c, "> ")
 
 	sshSession.Stdin = os.Stdin
 	ct := colorable.NewColorable(os.Stdout)
@@ -179,6 +201,13 @@ func main() {
 }
 
 func verifyConnection(status tls.ConnectionState) error {
+	return nil
+}
+
+func passHostKeyConfirm(hostname string, remote net.Addr, key ssh.PublicKey) error {
+	fmt.Printf("Host key fingerprint from %s(%v) is:\n", hostname, remote)
+	finger := ssh.FingerprintSHA256(key)
+	fmt.Printf("%s -> %s \n", key.Type(), finger)
 	return nil
 }
 

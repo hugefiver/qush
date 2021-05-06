@@ -16,10 +16,14 @@ type Flags struct {
 	Port uint16
 	Host string
 
+	IgnorePubKey bool
+
 	Cmd []string
 
 	Version bool
 	Help    bool
+
+	DebugOnlyPasswd *string
 }
 
 func ParseFlags() *Flags {
@@ -28,13 +32,35 @@ func ParseFlags() *Flags {
 	flag.StringVarP(&f.User, "login", "l", "", "Login user name")
 	flag.Uint16VarP(&f.Port, "port", "p", 22, "QUSH server port")
 
+	flag.BoolVarP(&f.IgnorePubKey, "ignore", "I", false,
+		"Set for ignore server public confirm")
+
 	flag.CountVarP(&f.Verbose, "verbose", "v", "Set for debug")
 
 	flag.BoolVarP(&f.Version, "version", "V", false, "Show information")
 	flag.BoolVarP(&f.Help, "help", "h", false, "Show this help page")
 
+	flag.String("debug-passwd", "", "[only for debug]")
+
 	flag.Parse()
 
+	passwd := flag.Lookup("debug-passwd")
+
+	// if `help` or `version` is set
+	// return directly
+	if f.Help || f.Version {
+		return &f
+	}
+
+	// parse debug password
+	passwd.Hidden = true
+	if passwd.Changed {
+		p := passwd.Value.String()
+		f.DebugOnlyPasswd = &p
+		println(p)
+	}
+
+	// `host` must be set
 	if flag.NArg() == 0 {
 		golog.Fatalln("host must be specialized")
 	}
