@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	golog "log"
 	"net"
 	"os"
@@ -29,9 +30,6 @@ var buildTime = "unknown"
 var clientVersion = "QUSH-0.0.1"
 
 func main() {
-	golog.SetFlags(golog.Lmsgprefix)
-	golog.SetPrefix("[debug] ")
-
 	flags := ParseFlags()
 
 	if flags.Help {
@@ -42,6 +40,13 @@ func main() {
 	if flags.Version {
 		showVerbose()
 		os.Exit(0)
+	}
+
+	var debug *golog.Logger
+	if flags.Verbose > 0 {
+		debug = golog.New(os.Stderr, "[debug]", golog.Lmsgprefix)
+	} else {
+		debug = golog.New(ioutil.Discard, "", 0)
 	}
 
 	tlsConfig := &tls.Config{
@@ -97,7 +102,7 @@ func main() {
 		signal.Notify(ch, os.Interrupt, os.Kill)
 
 		for s := range ch {
-			golog.Printf("get a %s signal, program will exit.", s.String())
+			debug.Printf("get a %s signal, program will exit.", s.String())
 			clearer()
 			os.Exit(0)
 		}
@@ -106,22 +111,22 @@ func main() {
 	// connect server
 	session, err := quic.DialAddr(fmt.Sprintf("%s:%d", flags.Host, flags.Port), tlsConfig, quicConfig)
 	if err != nil {
-		golog.Fatal(err)
+		debug.Fatal(err)
 	}
 	addCloser(func() {
 		session.CloseWithError(consits.DISCONNECT, "program exited")
 	})
-	golog.Println("connected")
+	debug.Println("connected")
 
 	// open a QUIC stream
 	stream, err := session.OpenStreamSync(context.Background())
 	if err != nil {
-		golog.Fatal(err)
+		debug.Fatal(err)
 	}
 	addCloser(func() {
 		stream.Close()
 	})
-	golog.Println("opened a QUIC stream")
+	debug.Println("opened a QUIC stream")
 
 	keyConfirmCallback := hostKeyConfirm
 	if flags.IgnorePubKey {
@@ -143,14 +148,14 @@ func main() {
 
 	conn, channels, reqs, err := ssh.NewClientConn(wrap.From(stream, session), session.RemoteAddr().String(), config)
 	if err != nil {
-		golog.Fatal(err)
+		debug.Fatal(err)
 	}
-	golog.Println("new SSH conn created")
+	debug.Println("new SSH conn created")
 
 	client := ssh.NewClient(conn, channels, reqs)
 	sshSession, err := client.NewSession()
 	if err != nil {
-		golog.Fatalln(err)
+		debug.Fatalln(err)
 	}
 	defer func() {
 		sshSession.Close()
@@ -158,13 +163,13 @@ func main() {
 
 	oldStdinPerm, err := term.MakeRaw(int(os.Stdin.Fd()))
 	if err != nil {
-		golog.Fatalln(err)
+		debug.Fatalln(err)
 	}
 	defer term.Restore(int(os.Stdin.Fd()), oldStdinPerm)
 
 	//oldStdoutPerm, err := term.MakeRaw(int(os.Stdout.Fd()))
 	//if err != nil {
-	//	golog.Fatalln(err)
+	//	debug.Fatalln(err)
 	//}
 	//defer term.Restore(int(os.Stdout.Fd()), oldStdoutPerm)
 
@@ -175,9 +180,9 @@ func main() {
 
 	w, h, err := term.GetSize(int(os.Stdout.Fd()))
 	if err != nil {
-		golog.Printf("window size: %dx%d, err=%v \n", w, h, err)
+		debug.Printf("window size: %dx%d, err=%v \n", w, h, err)
 	} else {
-		golog.Printf("windows size: %dx%d \n", w, h)
+		debug.Printf("windows size: %dx%d \n", w, h)
 	}
 
 	if err := sshSession.RequestPty("xterm", h, w, ssh.TerminalModes{
@@ -185,13 +190,13 @@ func main() {
 		ssh.TTY_OP_ISPEED: 14400,
 		ssh.TTY_OP_OSPEED: 14400,
 	}); err != nil {
-		golog.Fatalln(err)
+		debug.Fatalln(err)
 	}
 
 	if len(flags.Cmd) == 0 {
-		golog.Println("request a shell")
+		debug.Println("request a shell")
 		if err := sshSession.Shell(); err != nil {
-			golog.Fatalln(err)
+			debug.Fatalln(err)
 		}
 		sshSession.Wait()
 	} else {
