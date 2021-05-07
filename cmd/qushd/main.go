@@ -179,7 +179,7 @@ func handleQUICSession(session quic.Session, serverConf *ssh.ServerConfig) {
 				continue
 			}
 
-			go handleSSHChannel(newChannel)
+			go handleSSHChannel(newChannel, conn.User())
 			{
 				//	// Channels have a type, depending on the application level
 				//	// protocol intended. In the case of a shell, the type is

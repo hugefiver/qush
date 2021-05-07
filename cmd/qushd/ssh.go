@@ -3,17 +3,15 @@ package main
 import (
 	"encoding/binary"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
-	"sync"
 
 	gopty "github.com/creack/pty"
 	"github.com/hugefiver/qush/ssh"
 	"github.com/rs/zerolog/log"
 )
 
-func handleSSHChannel(c ssh.NewChannel) {
+func handleSSHChannel(c ssh.NewChannel, user string) {
 	channel, reqs, err := c.Accept()
 	if err != nil {
 		log.Debug().Err(err).Msg("cannot accept channel")
@@ -33,16 +31,38 @@ func handleSSHChannel(c ssh.NewChannel) {
 		log.Debug().Msgf("SHELL is empty, will use `%s` ", shell)
 	}
 
+	running := false
+
 	for req := range reqs {
 		log.Debug().Msgf("Type: %v; Payload: %v", req.Type, req.Payload)
 		ok := false
 
+		home := os.Getenv("HOME")
+		path := os.Getenv("PATH")
+
+		envs := []string{
+			"TERM=xterm",
+			fmt.Sprintf("HOME=%s", home),
+			fmt.Sprintf("PWD=%s", home),
+			fmt.Sprintf("PATH=%s", path),
+			fmt.Sprintf("USER=%s", user),
+		}
+
 		switch req.Type {
 		case "exec":
+			if running {
+				req.Reply(false, nil)
+				log.Debug().Msg("ignore duplicate execute request")
+				continue
+			}
+			running = true
 			ok = true
+
 			length := req.Payload[3]
 			command := string(req.Payload[4 : length+4])
 			cmd := exec.Command(shell, []string{"-c", command}...)
+			cmd.Dir = home
+			cmd.Env = envs
 
 			//e := func(e, v string) string {
 			//	return fmt.Sprintf("%s=%s", strings.ToUpper(e), v)
@@ -56,11 +76,14 @@ func handleSSHChannel(c ssh.NewChannel) {
 			//
 			//cmd.Env = envs
 
-			cmd.Stdout = channel
-			cmd.Stderr = channel
-			cmd.Stdin = channel
+			err := PtyRun(cmd, tty)
+			if err != nil {
+				log.Printf("%s", err)
+			}
 
-			err := cmd.Start()
+			PipeChannels(channel, pty)
+
+			err = cmd.Start()
 			if err != nil {
 				log.Printf("could not start command (%s)", err)
 
@@ -71,15 +94,22 @@ func handleSSHChannel(c ssh.NewChannel) {
 			go func() {
 				_, err := cmd.Process.Wait()
 				if err != nil {
-					log.Printf("failed to exit bash (%s)", err)
+					log.Printf("failed to exit command: (%s)", err)
 				}
 				channel.Close()
 				log.Printf("session closed")
 			}()
 		case "shell":
+			if running {
+				req.Reply(false, nil)
+				log.Debug().Msg("ignore duplicate execute request")
+				continue
+			}
+			running = true
+			ok = true
+
 			cmd := exec.Command(shell)
-			home := os.Getenv("HOME")
-			path := os.Getenv("PATH")
+			cmd.Dir = home
 			cmd.Env = []string{
 				"TERM=xterm",
 				fmt.Sprintf("HOME=%s", home),
@@ -91,37 +121,18 @@ func handleSSHChannel(c ssh.NewChannel) {
 				log.Printf("%s", err)
 			}
 
-			// Teardown session
-			var once sync.Once
-			closeFun := func() {
+			PipeChannels(channel, pty)
+
+			go func() {
+				_, err := cmd.Process.Wait()
+				if err != nil {
+					log.Printf("failed to exit shell (%s)", err)
+				}
 				channel.Close()
 				log.Printf("session closed")
-			}
-
-			// Pipe session to bash and visa-versa
-			go func() {
-				io.Copy(channel, pty)
-				once.Do(closeFun)
 			}()
 
-			go func() {
-				io.Copy(pty, channel)
-				once.Do(closeFun)
-			}()
-
-			// We don't accept any commands (Payload),
-			// only the default shell.
-			//
-			// any other payload will be ignore
-			//
-			//if len(req.Payload) == 0 {
-			//	ok = true
-			//}
 			ok = true
-
-			if req.WantReply {
-				req.Reply(true, []byte{})
-			}
 
 		case "pty-req":
 			// Responding 'ok' here will let the client
@@ -140,10 +151,13 @@ func handleSSHChannel(c ssh.NewChannel) {
 		}
 
 		if !ok {
-			log.Printf("declining %s request...", req.Type)
+			log.Print("declining %s request:", req.Type)
 		}
 
-		_ = req.Reply(ok, nil)
+		if req.WantReply {
+			_ = req.Reply(ok, nil)
+		}
+
 	}
 
 }
