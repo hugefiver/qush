@@ -29,6 +29,8 @@ var version = "0.0.1"
 var buildTime = "unknown"
 var clientVersion = "QUSH-0.0.1"
 
+var debug *golog.Logger
+
 func main() {
 	flags := ParseFlags()
 
@@ -42,7 +44,6 @@ func main() {
 		os.Exit(0)
 	}
 
-	var debug *golog.Logger
 	if flags.Verbose > 0 {
 		debug = golog.New(os.Stderr, "[debug]", golog.Lmsgprefix)
 	} else {
@@ -133,12 +134,12 @@ func main() {
 		keyConfirmCallback = passHostKeyConfirm
 	}
 
-	user := "test"
+	user := flags.User
 	config := &ssh.ClientConfig{
 		Config: ssh.Config{},
-		User:   flags.User,
+		User:   user,
 		//Auth:              []ssh.AuthMethod{ssh.Password("test")},
-		Auth:              []ssh.AuthMethod{EnterPasswd(user)},
+		Auth:              []ssh.AuthMethod{EnterPasswd(user, flags.PasswdTries)},
 		HostKeyCallback:   keyConfirmCallback,
 		BannerCallback:    ssh.BannerDisplayStderr(),
 		ClientVersion:     clientVersion,
@@ -240,4 +241,8 @@ func showVerbose() {
 	fmt.Println("QUSH - Quick UDP Shell")
 	fmt.Printf("Client version %s, build time %s \n", version, buildTime)
 	fmt.Println("Author Hugefiver<i@iruri.moe> 2021")
+}
+
+func init() {
+	golog.SetFlags(golog.Lmsgprefix)
 }

@@ -1,7 +1,7 @@
 package auth
 
 import (
-	"errors"
+	"fmt"
 
 	"github.com/hugefiver/qush/ssh"
 )
@@ -12,8 +12,6 @@ func PasswordAuthFunc(conn ssh.ConnMetadata, password []byte) (*ssh.Permissions,
 		return nil, nil
 	} else {
 		//log.Info().Msgf("Failed login with %s from %v", conn.User(), conn.RemoteAddr())
-		return nil, errors.New("login failed")
+		return nil, fmt.Errorf("login failed for %s", conn.User())
 	}
-
-	//return nil, nil
 }

@@ -9,7 +9,7 @@ import (
 	"github.com/hugefiver/qush/ssh"
 )
 
-func EnterPasswd(user string) ssh.AuthMethod {
+func EnterPasswd(user string, max int) ssh.AuthMethod {
 	callback := func() (string, error) {
 		fmt.Printf("Input password for %s: ", user)
 		p, err := term.ReadPassword(int(os.Stdin.Fd()))
@@ -17,5 +17,6 @@ func EnterPasswd(user string) ssh.AuthMethod {
 		return string(p), err
 	}
 
-	return ssh.PasswordCallback(callback)
+	//return ssh.PasswordCallback(callback)
+	return ssh.RetryableAuthMethod(ssh.PasswordCallback(callback), max)
 }

@@ -18,6 +18,8 @@ type Flags struct {
 
 	IgnorePubKey bool
 
+	PasswdTries int
+
 	Cmd []string
 
 	Version bool
@@ -34,6 +36,8 @@ func ParseFlags() *Flags {
 
 	flag.BoolVarP(&f.IgnorePubKey, "ignore", "I", false,
 		"Set for ignore server public confirm")
+
+	flag.IntVar(&f.PasswdTries, "tries", -1, "max tries of input password")
 
 	flag.CountVarP(&f.Verbose, "verbose", "v", "Set for debug")
 
@@ -57,7 +61,6 @@ func ParseFlags() *Flags {
 	if passwd.Changed {
 		p := passwd.Value.String()
 		f.DebugOnlyPasswd = &p
-		println(p)
 	}
 
 	// `host` must be set
@@ -70,8 +73,10 @@ func ParseFlags() *Flags {
 	host := arg[0]
 	cmd := arg[1:]
 
-	golog.Println("host:", host)
-	golog.Println("cmd:", cmd)
+	if f.Verbose > 0 {
+		golog.Println("host:", host)
+		golog.Println("cmd:", cmd)
+	}
 
 	// parse user and hostname
 	{
