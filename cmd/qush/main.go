@@ -134,12 +134,19 @@ func main() {
 		keyConfirmCallback = passHostKeyConfirm
 	}
 
+	// login user
 	user := flags.User
+
+	// password auth
+	passwdAuth := EnterPasswd(user, flags.PasswdTries)
+	if flags.DebugOnlyPasswd != nil {
+		passwdAuth = ssh.Password(*flags.DebugOnlyPasswd)
+	}
+
 	config := &ssh.ClientConfig{
-		Config: ssh.Config{},
-		User:   user,
-		//Auth:              []ssh.AuthMethod{ssh.Password("test")},
-		Auth:              []ssh.AuthMethod{EnterPasswd(user, flags.PasswdTries)},
+		Config:            ssh.Config{},
+		User:              user,
+		Auth:              []ssh.AuthMethod{passwdAuth},
 		HostKeyCallback:   keyConfirmCallback,
 		BannerCallback:    ssh.BannerDisplayStderr(),
 		ClientVersion:     clientVersion,

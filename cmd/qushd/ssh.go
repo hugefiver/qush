@@ -78,17 +78,12 @@ func handleSSHChannel(c ssh.NewChannel, user string) {
 
 			err := PtyRun(cmd, tty)
 			if err != nil {
-				log.Printf("%s", err)
-			}
-
-			PipeChannels(channel, pty)
-
-			err = cmd.Start()
-			if err != nil {
 				log.Printf("could not start command (%s)", err)
-
 				continue
 			}
+
+			// set pipe of ssh channel and pty
+			PipeChannels(channel, pty)
 
 			// teardown session
 			go func() {

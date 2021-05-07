@@ -19,7 +19,7 @@ func PipeChannels(c1, c2 io.ReadWriteCloser) {
 	}()
 
 	go func() {
-		io.Copy(c1, c2)
+		io.Copy(c2, c1)
 		once.Do(closeFun)
 	}()
 }
