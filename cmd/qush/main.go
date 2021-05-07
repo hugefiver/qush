@@ -156,12 +156,12 @@ func main() {
 		sshSession.Close()
 	}()
 
-	//oldStdinPerm, err := term.MakeRaw(int(os.Stdin.Fd()))
-	//if err != nil {
-	//	golog.Fatalln(err)
-	//}
-	//defer term.Restore(int(os.Stdin.Fd()), oldStdinPerm)
-	//
+	oldStdinPerm, err := term.MakeRaw(int(os.Stdin.Fd()))
+	if err != nil {
+		golog.Fatalln(err)
+	}
+	defer term.Restore(int(os.Stdin.Fd()), oldStdinPerm)
+
 	//oldStdoutPerm, err := term.MakeRaw(int(os.Stdout.Fd()))
 	//if err != nil {
 	//	golog.Fatalln(err)
@@ -225,7 +225,7 @@ func hostKeyConfirm(hostname string, remote net.Addr, key ssh.PublicKey) error {
 		case "no":
 			return errors.New("connection canceled by user")
 		default:
-			fmt.Println(`invalid input, please input "yes" or "no". \n`)
+			fmt.Println(`invalid input, please input "yes" or "no".`)
 			continue
 		}
 	}
