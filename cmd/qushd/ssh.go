@@ -24,11 +24,14 @@ func handleSSHChannel(c ssh.NewChannel, user string) {
 		log.Debug().Err(err).Msg("cannot open pty")
 	}
 
-	shell := os.Getenv("SHELL")
-	log.Debug().Msgf("show env: SHELL=%s", shell)
+	shell := programConfig.Shell
 	if shell == "" {
-		shell = "sh"
-		log.Debug().Msgf("SHELL is empty, will use `%s` ", shell)
+		shell = os.Getenv("SHELL")
+		log.Debug().Msgf("show env: SHELL=%s", shell)
+		if shell == "" {
+			shell = "sh"
+			log.Debug().Msgf("SHELL is empty, will use `%s` ", shell)
+		}
 	}
 
 	running := false

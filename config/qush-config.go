@@ -14,6 +14,8 @@ type ServerConfig struct {
 	HostKeyPath string
 	PasswdAuth  bool
 
+	Shell string
+
 	LogPath  string
 	LogLevel string
 }
@@ -26,6 +28,7 @@ func DefaultServerConfig() *ServerConfig {
 		PasswdAuth:  true,
 		LogLevel:    "Info",
 		LogPath:     "",
+		Shell:       "",
 	}
 }
 
@@ -64,6 +67,12 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 
 		config.LogLevel = s.Key("LogLevel").In(config.LogLevel, []string{"Debug", "Info", "Warning", "Error"})
 		config.LogPath = s.Key("LogPath").MustString(config.LogPath)
+	}
+
+	// Section `Command`
+	{
+		s := i.Section("Command")
+		config.Shell = s.Key("Shell").MustString(config.Shell)
 	}
 
 	return config, nil

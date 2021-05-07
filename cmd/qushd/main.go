@@ -37,6 +37,8 @@ var version = "0.0.1"
 var buildTime = "unknown"
 var serverVersion = "QUSH-0.0.1"
 
+var programConfig *serverConfig.ServerConfig
+
 //var keyRings agent.Agent
 
 func main() {
@@ -46,6 +48,7 @@ func main() {
 	if err != nil {
 		golog.Fatalln("Cannot load server config:", err)
 	}
+	programConfig = c
 
 	loadLogger(c.LogPath, c.LogLevel, f.Verbose)
 
