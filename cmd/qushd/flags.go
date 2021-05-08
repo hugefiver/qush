@@ -23,7 +23,7 @@ func ParseFlags() *Flags {
 	flag.BoolVar(&f.GenKey, "genkey", false, "Generate host private key")
 	flag.StringVar(&f.KeyPath, "keypath", "", "Key path for genkey, default is /etc/qush/qush_host_key")
 
-	flag.StringVar(&f.ConfigPath, "config", "", "Config path")
+	flag.StringVar(&f.ConfigPath, "conf", "", "Config path")
 	flag.BoolVar(&f.GenConfig, "genconf", false, "Generate config file with default")
 
 	flag.CountVarP(&f.Verbose, "verbose", "v", "Level for messages with count of \"v\";\n"+

@@ -125,15 +125,15 @@ func main() {
 	}
 
 	// add host key
-	k, err := key.LoadHostKey(c.HostKeyPath)
-	if err != nil {
-		log.Fatal().Err(err).Msg("Cannot load host key")
-	}
-	hostKey, err := ssh.NewSignerFromKey(k)
-	if err != nil {
-		log.Fatal().Err(err).Msg("Cannot parse host key")
-	}
-	serverConf.AddHostKey(hostKey)
+	//k, err := key.LoadHostKey(c.HostKeyPath)
+	//if err != nil {
+	//	log.Fatal().Err(err).Msg("Cannot load host key")
+	//}
+	//hostKey, err := ssh.NewSignerFromKey(k)
+	//if err != nil {
+	//	log.Fatal().Err(err).Msg("Cannot parse host key")
+	//}
+	//serverConf.AddHostKey(hostKey)
 
 	for {
 		session, err := listener.Accept(context.Background())
@@ -322,7 +322,7 @@ func processArgs() *Flags {
 		if runtime.GOOS == "windows" {
 			f.ConfigPath = filepath.Join(os.Getenv("LOCALAPPDATA"), "qush", "qushd_config.ini")
 		} else {
-			f.ConfigPath = "/etc/qushd/qushd_config.ini"
+			f.ConfigPath = "/etc/qush/qushd_config.ini"
 		}
 	}
 
