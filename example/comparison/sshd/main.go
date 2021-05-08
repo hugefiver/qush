@@ -44,7 +44,11 @@ func main() {
 	// add host key
 	k, err := key.LoadHostKey(*keypath)
 	if err != nil {
-		panic(err)
+		log.Println("load key fail, generating new key")
+		_, k, err = key.CreateEd25519Key()
+		if err != nil {
+			panic(err)
+		}
 	}
 	signer, err := ssh.NewSignerFromKey(k)
 	if err != nil {
