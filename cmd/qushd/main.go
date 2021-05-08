@@ -11,21 +11,16 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/hugefiver/qush/consits"
-
-	"github.com/hugefiver/qush/auth"
-
-	"github.com/hugefiver/qush/wrap"
-
-	"github.com/hugefiver/qush/ssh"
-
-	"github.com/hugefiver/qush/quic"
-
-	"github.com/hugefiver/qush/key"
-
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/pflag"
+
+	"github.com/hugefiver/qush/auth"
+	"github.com/hugefiver/qush/consits"
+	"github.com/hugefiver/qush/key"
+	"github.com/hugefiver/qush/quic"
+	"github.com/hugefiver/qush/ssh"
+	"github.com/hugefiver/qush/wrap"
 
 	serverConfig "github.com/hugefiver/qush/config"
 	"github.com/hugefiver/qush/config/conf"
