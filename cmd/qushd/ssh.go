@@ -49,6 +49,7 @@ func handleSSHChannel(c ssh.NewChannel, user string) {
 			fmt.Sprintf("PWD=%s", home),
 			fmt.Sprintf("PATH=%s", path),
 			fmt.Sprintf("USER=%s", user),
+			fmt.Sprintf("SHELL=%s", shell),
 		}
 
 		switch req.Type {

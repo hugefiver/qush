@@ -96,12 +96,18 @@ func main() {
 
 		// set application field
 		tlsConfig.NextProtos = []string{"qush"}
+
+		// use tls1.3
+		tlsConfig.CipherSuites = []uint16{tls.TLS_AES_128_GCM_SHA256}
+		tlsConfig.MinVersion = tls.VersionTLS13
 	}
 
 	quicConfig := &quic.Config{
 		KeepAlive: true,
+		//EnableDatagrams:         true,
+		//DisablePathMTUDiscovery: true,
 	}
-	listener, err := quic.ListenAddr(fmt.Sprintf("%v:%v", c.Addr, c.Port), tlsConfig, quicConfig)
+	listener, err := quic.ListenAddrEarly(fmt.Sprintf("%v:%v", c.Addr, c.Port), tlsConfig, quicConfig)
 	if err != nil {
 		log.Err(err).Msg("")
 		log.Fatal().Msgf("QUSHD is exiting, cause can't listen at %v:%v", c.Addr, c.Port)

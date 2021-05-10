@@ -72,6 +72,7 @@ func main() {
 				conn.RemoteAddr(), err)
 			continue
 		}
+		log.Println("accept connection from", conn.RemoteAddr())
 		go handleSSH(conn, sshConfig, *shell)
 	}
 }

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -52,13 +51,14 @@ func main() {
 		VerifyConnection:            verifyConnection,
 		NextProtos:                  []string{"qush"},
 		InsecureSkipVerify:          true,
-		CipherSuites:                nil,
+		CipherSuites:                []uint16{tls.TLS_AES_128_GCM_SHA256},
 		PreferServerCipherSuites:    false,
 		SessionTicketsDisabled:      false,
 		CurvePreferences:            nil,
 		DynamicRecordSizingDisabled: false,
 		Renegotiation:               0,
 		KeyLogWriter:                nil,
+		MinVersion:                  tls.VersionTLS13,
 	}
 	quicConfig := &quic.Config{
 		Versions:                       nil,
@@ -75,9 +75,9 @@ func main() {
 		MaxIncomingUniStreams:          0,
 		StatelessResetKey:              nil,
 		KeepAlive:                      true,
-		DisablePathMTUDiscovery:        false,
-		EnableDatagrams:                false,
-		Tracer:                         nil,
+		//DisablePathMTUDiscovery:        true,
+		//EnableDatagrams:                true,
+		Tracer: nil,
 	}
 
 	// clear closers when exist
@@ -107,7 +107,7 @@ func main() {
 	}()
 
 	// connect server
-	session, err := quic.DialAddr(fmt.Sprintf("%s:%d", flags.Host, flags.Port), tlsConfig, quicConfig)
+	session, err := quic.DialAddrEarly(fmt.Sprintf("%s:%d", flags.Host, flags.Port), tlsConfig, quicConfig)
 	if err != nil {
 		debug.Fatal(err)
 	}
@@ -117,7 +117,7 @@ func main() {
 	debug.Println("connected")
 
 	// open a QUIC stream
-	stream, err := session.OpenStreamSync(context.Background())
+	stream, err := session.OpenStream()
 	if err != nil {
 		debug.Fatal(err)
 	}
