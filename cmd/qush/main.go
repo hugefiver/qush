@@ -107,6 +107,7 @@ func main() {
 	}()
 
 	// connect server
+	debug.Println("starting connect")
 	session, err := quic.DialAddrEarly(fmt.Sprintf("%s:%d", flags.Host, flags.Port), tlsConfig, quicConfig)
 	if err != nil {
 		debug.Fatal(err)
