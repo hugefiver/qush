@@ -74,8 +74,8 @@ func ParseFlags() *Flags {
 	cmd := arg[1:]
 
 	if f.Verbose > 0 {
-		golog.Println("host:", host)
-		golog.Println("cmd:", cmd)
+		golog.Println("[debug] host:", host)
+		golog.Println("[debug] cmd:", cmd)
 	}
 
 	// parse user and hostname
