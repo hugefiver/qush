@@ -103,7 +103,11 @@ func main() {
 	}
 
 	quicConfig := &quic.Config{
-		KeepAlive: true,
+		KeepAlive:                      true,
+		InitialStreamReceiveWindow:     4 * util.MB,
+		MaxStreamReceiveWindow:         16 * util.MB,
+		InitialConnectionReceiveWindow: 4 * util.MB,
+		MaxConnectionReceiveWindow:     32 * util.MB,
 		//EnableDatagrams:         true,
 		//DisablePathMTUDiscovery: true,
 	}

@@ -11,6 +11,8 @@ import (
 	"os/signal"
 	"strings"
 
+	"github.com/hugefiver/qush/util"
+
 	"github.com/mattn/go-colorable"
 	"github.com/spf13/pflag"
 	"golang.org/x/term"
@@ -67,10 +69,10 @@ func main() {
 		MaxIdleTimeout:                 0,
 		AcceptToken:                    nil,
 		TokenStore:                     nil,
-		InitialStreamReceiveWindow:     0,
-		MaxStreamReceiveWindow:         0,
-		InitialConnectionReceiveWindow: 0,
-		MaxConnectionReceiveWindow:     0,
+		InitialStreamReceiveWindow:     8 * util.MB,
+		MaxStreamReceiveWindow:         16 * util.MB,
+		InitialConnectionReceiveWindow: 8 * util.MB,
+		MaxConnectionReceiveWindow:     32 * util.MB,
 		MaxIncomingStreams:             0,
 		MaxIncomingUniStreams:          0,
 		StatelessResetKey:              nil,
