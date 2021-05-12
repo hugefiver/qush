@@ -59,16 +59,24 @@ func main() {
 		panic(err)
 	}
 
-	oldStdinPerm, err := term.MakeRaw(int(os.Stdin.Fd()))
-	if err != nil {
-		panic(err)
+	infd := int(os.Stdin.Fd())
+	if term.IsTerminal(infd) {
+		oldStdinPerm, err := term.MakeRaw(infd)
+		if err != nil {
+			panic(err)
+		}
+		defer term.Restore(int(os.Stdin.Fd()), oldStdinPerm)
 	}
-	defer term.Restore(int(os.Stdin.Fd()), oldStdinPerm)
 
 	sess.Stdin = os.Stdin
-	ct := colorable.NewColorable(os.Stdout)
-	sess.Stdout = ct
-	sess.Stderr = ct
+	if term.IsTerminal(int(os.Stdout.Fd())) {
+		ct := colorable.NewColorable(os.Stdout)
+		sess.Stdout = ct
+		sess.Stderr = ct
+	} else {
+		sess.Stdout = os.Stdout
+		sess.Stderr = os.Stderr
+	}
 
 	w, h, err := term.GetSize(int(os.Stdout.Fd()))
 	if err != nil {
@@ -91,4 +99,5 @@ func main() {
 	} else {
 		sess.Run(strings.Join(commands, " "))
 	}
+	log.Println("connect finished")
 }
