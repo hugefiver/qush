@@ -150,7 +150,7 @@ func handleSSHChannel(c ssh.NewChannel, user string) {
 		}
 
 		if !ok {
-			log.Print("declining %s request:", req.Type)
+			log.Printf("declining %s request", req.Type)
 		}
 
 		if req.WantReply {
