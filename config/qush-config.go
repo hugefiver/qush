@@ -1,11 +1,14 @@
 package config
 
 import (
+	"errors"
 	"path/filepath"
 
 	"github.com/go-ini/ini"
 	"github.com/hugefiver/qush/configdir"
 )
+
+var _serverConfig *ServerConfig
 
 type ServerConfig struct {
 	Addr string
@@ -18,6 +21,9 @@ type ServerConfig struct {
 
 	LogPath  string
 	LogLevel string
+
+	DefaultUser   string
+	DefaultPasswd string
 }
 
 func DefaultServerConfig() *ServerConfig {
@@ -30,6 +36,13 @@ func DefaultServerConfig() *ServerConfig {
 		LogPath:     "",
 		Shell:       "",
 	}
+}
+
+func GetServerConfig() (*ServerConfig, error) {
+	if _serverConfig == nil {
+		return nil, errors.New("get config must be called after init")
+	}
+	return _serverConfig, nil
 }
 
 func LoadServerConfig(path string) (*ServerConfig, error) {
@@ -59,6 +72,14 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 		if k, err := s.GetKey("PasswdAuth"); err == nil {
 			config.PasswdAuth = k.MustBool(config.PasswdAuth)
 		}
+
+		if user, err := s.GetKey("User"); err == nil {
+			config.DefaultUser = user.MustString("")
+		}
+
+		if p, err := s.GetKey("Password"); err == nil {
+			config.DefaultPasswd = p.MustString("")
+		}
 	}
 
 	// Section `Log`
@@ -74,6 +95,8 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 		s := i.Section("Command")
 		config.Shell = s.Key("Shell").MustString(config.Shell)
 	}
+
+	_serverConfig = config
 
 	return config, nil
 }
