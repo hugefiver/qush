@@ -45,6 +45,9 @@ func main() {
 	}
 	programConfig = c
 
+	// init auth package
+	auth.Init()
+
 	loadLogger(c.LogPath, c.LogLevel, f.Verbose)
 
 	// if `genkey`

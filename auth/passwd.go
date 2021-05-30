@@ -19,7 +19,7 @@ func PasswordAuthFunc(conn ssh.ConnMetadata, password []byte) (*ssh.Permissions,
 	}
 }
 
-func init() {
+func Init() {
 	c, err := config.GetServerConfig()
 	if err != nil {
 		panic(err)
