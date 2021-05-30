@@ -188,42 +188,7 @@ func handleQUICSession(session quic.Session, serverConf *ssh.ServerConfig) {
 			}
 
 			go handleSSHChannel(newChannel, conn.User())
-			{
-				//	// Channels have a type, depending on the application level
-				//	// protocol intended. In the case of a shell, the type is
-				//	// "session" and ServerShell may be used to present a simple
-				//	// terminal interface.
-				//	if newChannel.ChannelType() != "session" {
-				//		_ = newChannel.Reject(ssh.UnknownChannelType, "unknown channel type")
-				//		continue
-				//	}
-				//	channel, requests, err := newChannel.Accept()
-				//	if err != nil {
-				//		log.Debug().Err(err).Msg("Could not accept channel")
-				//	}
-				//
-				//	// Sessions have out-of-band requests such as "shell",
-				//	// "pty-req" and "env".  Here we handle only the
-				//	// "shell" request.
-				//	go func(in <-chan *ssh.Request) {
-				//		for req := range in {
-				//			_ = req.Reply(req.Type == "shell", nil)
-				//		}
-				//	}(requests)
-				//
-				//	terminal := term.NewTerminal(channel, "> ")
-				//
-				//	go func() {
-				//		defer channel.Close()
-				//		for {
-				//			line, err := terminal.ReadLine()
-				//			if err != nil {
-				//				break
-				//			}
-				//			fmt.Println(line)
-				//		}
-				//	}()
-			}
+
 		}
 	}
 
