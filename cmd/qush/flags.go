@@ -46,9 +46,12 @@ func ParseFlags() *Flags {
 
 	flag.String("debug-passwd", "", "[only for debug]")
 
-	flag.Parse()
-
+	// password from args only for debug
 	passwd := flag.Lookup("debug-passwd")
+	// hide from usage
+	passwd.Hidden = true
+
+	flag.Parse()
 
 	// if `help` or `version` is set
 	// return directly
@@ -56,8 +59,6 @@ func ParseFlags() *Flags {
 		return &f
 	}
 
-	// parse debug password
-	passwd.Hidden = true
 	if passwd.Changed {
 		p := passwd.Value.String()
 		f.DebugOnlyPasswd = &p
