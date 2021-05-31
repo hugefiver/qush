@@ -11,15 +11,15 @@ import (
 	"os/signal"
 	"strings"
 
-	"github.com/hugefiver/qush/util"
+	"github.com/spf13/pflag"
 
 	"github.com/mattn/go-colorable"
-	"github.com/spf13/pflag"
 	"golang.org/x/term"
 
 	"github.com/hugefiver/qush/consits"
 	"github.com/hugefiver/qush/quic"
 	"github.com/hugefiver/qush/ssh"
+	"github.com/hugefiver/qush/util"
 	"github.com/hugefiver/qush/wrap"
 )
 

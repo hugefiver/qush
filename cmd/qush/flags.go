@@ -53,6 +53,12 @@ func ParseFlags() *Flags {
 
 	flag.Parse()
 
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Help of %s:\n", os.Args[0])
+		fmt.Fprintln(os.Stderr, "usages: qush [-hvV] [-l user] [user@]host ")
+		flag.PrintDefaults()
+	}
+
 	// if `help` or `version` is set
 	// return directly
 	if f.Help || f.Version {
@@ -102,12 +108,6 @@ func ParseFlags() *Flags {
 	// check
 	if f.User == "" {
 		golog.Fatalln("please special a login user")
-	}
-
-	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Help of %s:\n", os.Args[0])
-		fmt.Fprintln(os.Stderr, "usages: qush [-hvV] [-l user] [user@]host ")
-		flag.PrintDefaults()
 	}
 
 	return &f
