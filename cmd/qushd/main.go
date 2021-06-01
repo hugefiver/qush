@@ -137,17 +137,6 @@ func main() {
 		GSSAPIWithMICConfig:         nil,
 	}
 
-	// add host key
-	//k, err := key.LoadHostKey(c.HostKeyPath)
-	//if err != nil {
-	//	log.Fatal().Err(err).Msg("Cannot load host key")
-	//}
-	//hostKey, err := ssh.NewSignerFromKey(k)
-	//if err != nil {
-	//	log.Fatal().Err(err).Msg("Cannot parse host key")
-	//}
-	//serverConf.AddHostKey(hostKey)
-
 	for {
 		session, err := listener.Accept(context.Background())
 		if err != nil {
