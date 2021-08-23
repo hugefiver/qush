@@ -4,7 +4,7 @@ import (
 	"crypto/tls"
 	"net"
 
-	"github.com/hugefiver/qush/quic"
+	"github.com/hugefiver/quic"
 )
 
 type QuicStream = quic.Stream

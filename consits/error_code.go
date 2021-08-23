@@ -1,6 +1,6 @@
 package consits
 
-import "github.com/hugefiver/qush/quic"
+import "github.com/hugefiver/quic"
 
 const (
 	UNDEFINED quic.ErrorCode = iota

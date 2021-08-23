@@ -16,8 +16,8 @@ import (
 	"github.com/mattn/go-colorable"
 	"golang.org/x/term"
 
+	"github.com/hugefiver/quic"
 	"github.com/hugefiver/qush/consits"
-	"github.com/hugefiver/qush/quic"
 	"github.com/hugefiver/qush/ssh"
 	"github.com/hugefiver/qush/util"
 	"github.com/hugefiver/qush/wrap"
