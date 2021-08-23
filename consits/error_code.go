@@ -1,8 +1,10 @@
 package consits
 
-import "github.com/hugefiver/quic"
+import (
+	"github.com/hugefiver/quic"
+)
 
 const (
-	UNDEFINED quic.ErrorCode = iota
+	UNDEFINED quic.ApplicationErrorCode = iota
 	DISCONNECT
 )

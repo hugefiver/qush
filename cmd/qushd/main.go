@@ -157,7 +157,7 @@ func handleQUICSession(session quic.Session, serverConf *ssh.ServerConfig) {
 		_ = session.CloseWithError(1, "Session closed")
 	} else {
 		log.Debug().Msgf("Accept a QUIC stream #%d from %v", s.StreamID(), session.RemoteAddr())
-		conn, channels, reqs, err := ssh.NewServerConn(wrap.From(s, session), serverConf)
+		conn, channels, reqs, err := ssh.NewServerConn(wrap.FromQuic(s, session), serverConf)
 		if err != nil {
 			addr := session.RemoteAddr()
 			log.Info().Err(err).Msgf("Disconnected from %v", addr)

@@ -154,7 +154,7 @@ func main() {
 		Timeout:           0,
 	}
 
-	conn, channels, reqs, err := ssh.NewClientConn(wrap.From(stream, session), session.RemoteAddr().String(), config)
+	conn, channels, reqs, err := ssh.NewClientConn(wrap.FromQuic(stream, session), session.RemoteAddr().String(), config)
 	if err != nil {
 		debug.Fatal(err)
 	}
