@@ -1,5 +1,0 @@
-package qush
-
-func init() {
-
-}
