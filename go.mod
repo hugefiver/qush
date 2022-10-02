@@ -41,6 +41,6 @@ require (
 	golang.org/x/tools v0.1.12 // indirect
 )
 
-require github.com/hugefiver/quic v0.23.1
+require github.com/hugefiver/quic v0.29.1
 
 replace github.com/hugefiver/quic => ./quic
