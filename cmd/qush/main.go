@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"time"
 
 	"github.com/spf13/pflag"
 
@@ -67,7 +68,6 @@ func main() {
 		ConnectionIDLength:             0,
 		HandshakeIdleTimeout:           0,
 		MaxIdleTimeout:                 0,
-		AcceptToken:                    nil,
 		TokenStore:                     nil,
 		InitialStreamReceiveWindow:     8 * util.MB,
 		MaxStreamReceiveWindow:         16 * util.MB,
@@ -76,7 +76,7 @@ func main() {
 		MaxIncomingStreams:             0,
 		MaxIncomingUniStreams:          0,
 		StatelessResetKey:              nil,
-		KeepAlive:                      true,
+		KeepAlivePeriod:                time.Second * 15,
 		//DisablePathMTUDiscovery:        true,
 		//EnableDatagrams:                true,
 		Tracer: nil,
@@ -110,17 +110,17 @@ func main() {
 
 	// connect server
 	debug.Println("starting connect")
-	session, err := quic.DialAddrEarly(fmt.Sprintf("%s:%d", flags.Host, flags.Port), tlsConfig, quicConfig)
+	qconn, err := quic.DialAddrEarly(fmt.Sprintf("%s:%d", flags.Host, flags.Port), tlsConfig, quicConfig)
 	if err != nil {
 		debug.Fatal(err)
 	}
 	addCloser(func() {
-		session.CloseWithError(consits.DISCONNECT, "program exited")
+		qconn.CloseWithError(consits.DISCONNECT, "program exited")
 	})
 	debug.Println("connected")
 
 	// open a QUIC stream
-	stream, err := session.OpenStream()
+	stream, err := qconn.OpenStream()
 	if err != nil {
 		debug.Fatal(err)
 	}
@@ -154,7 +154,7 @@ func main() {
 		Timeout:           0,
 	}
 
-	conn, channels, reqs, err := ssh.NewClientConn(wrap.FromQuic(stream, session), session.RemoteAddr().String(), config)
+	conn, channels, reqs, err := ssh.NewClientConn(wrap.FromQuic(stream, qconn), qconn.RemoteAddr().String(), config)
 	if err != nil {
 		debug.Fatal(err)
 	}

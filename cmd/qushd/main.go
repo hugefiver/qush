@@ -106,7 +106,7 @@ func main() {
 	}
 
 	quicConfig := &quic.Config{
-		KeepAlive:                      true,
+		KeepAlivePeriod:                0,
 		InitialStreamReceiveWindow:     4 * util.MB,
 		MaxStreamReceiveWindow:         16 * util.MB,
 		InitialConnectionReceiveWindow: 4 * util.MB,
@@ -149,17 +149,17 @@ func main() {
 
 }
 
-func handleQUICSession(session quic.Session, serverConf *ssh.ServerConfig) {
-	defer session.CloseWithError(consits.DISCONNECT, "server disconnected")
-	if s, err := session.AcceptStream(context.Background()); err != nil {
-		addr := session.RemoteAddr()
+func handleQUICSession(qconn quic.Connection, serverConf *ssh.ServerConfig) {
+	defer qconn.CloseWithError(consits.DISCONNECT, "server disconnected")
+	if s, err := qconn.AcceptStream(context.Background()); err != nil {
+		addr := qconn.RemoteAddr()
 		log.Debug().Err(err).Msgf("Cannot accept stream from %v, connection will close", addr)
-		_ = session.CloseWithError(1, "Session closed")
+		_ = qconn.CloseWithError(1, "Session closed")
 	} else {
-		log.Debug().Msgf("Accept a QUIC stream #%d from %v", s.StreamID(), session.RemoteAddr())
-		conn, channels, reqs, err := ssh.NewServerConn(wrap.FromQuic(s, session), serverConf)
+		log.Debug().Msgf("Accept a QUIC stream #%d from %v", s.StreamID(), qconn.RemoteAddr())
+		conn, channels, reqs, err := ssh.NewServerConn(wrap.FromQuic(s, qconn), serverConf)
 		if err != nil {
-			addr := session.RemoteAddr()
+			addr := qconn.RemoteAddr()
 			log.Info().Err(err).Msgf("Disconnected from %v", addr)
 			return
 		}

@@ -18,7 +18,6 @@ type Conn interface {
 type QuicConn interface {
 	Conn
 
-	Session() quic.Session
 	Stream() quic.Stream
 }
 
@@ -30,26 +29,22 @@ type ConnectionState struct {
 
 type ConnWrapper struct {
 	QuicStream
-	session quic.Session
+	Conn quic.Connection
 }
 
-func FromQuic(stream quic.Stream, session quic.Session) QuicConn {
+func FromQuic(stream quic.Stream, conn quic.Connection) QuicConn {
 	return &ConnWrapper{
 		QuicStream: stream,
-		session:    session,
+		Conn:       conn,
 	}
 }
 
 func (c ConnWrapper) LocalAddr() net.Addr {
-	return c.session.LocalAddr()
+	return c.Conn.LocalAddr()
 }
 
 func (c ConnWrapper) RemoteAddr() net.Addr {
-	return c.session.RemoteAddr()
-}
-
-func (c ConnWrapper) Session() quic.Session {
-	return c.session
+	return c.Conn.RemoteAddr()
 }
 
 func (c ConnWrapper) Stream() quic.Stream {
@@ -57,12 +52,11 @@ func (c ConnWrapper) Stream() quic.Stream {
 }
 
 func (c ConnWrapper) ConnectionStatus() ConnectionState {
-	s := c.session.ConnectionState()
-	t := s.TLS
+	s := c.Conn.ConnectionState()
 
 	return ConnectionState{
-		ConnectionState:   t.ConnectionState,
-		Used0RTT:          t.Used0RTT,
+		ConnectionState:   s.TLS.ConnectionState,
+		Used0RTT:          s.TLS.Used0RTT,
 		SupportsDatagrams: s.SupportsDatagrams,
 	}
 }
