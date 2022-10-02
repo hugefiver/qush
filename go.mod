@@ -31,6 +31,7 @@ require (
 require (
 	github.com/fsnotify/fsnotify v1.5.4 // indirect
 	github.com/google/go-cmp v0.5.9 // indirect
+	github.com/hugefiver/fakessh v0.2.6
 	github.com/mattn/go-isatty v0.0.16 // indirect
 	github.com/nxadm/tail v1.4.8 // indirect
 	golang.org/x/text v0.3.7 // indirect
