@@ -4,7 +4,7 @@ import (
 	"crypto/tls"
 	"net"
 
-	"github.com/hugefiver/qush/quic"
+	"github.com/hugefiver/quic"
 )
 
 type QuicStream = quic.Stream
@@ -12,9 +12,14 @@ type QuicStream = quic.Stream
 type Conn interface {
 	net.Conn
 
+	ConnectionStatus() ConnectionState
+}
+
+type QuicConn interface {
+	Conn
+
 	Session() quic.Session
 	Stream() quic.Stream
-	ConnectionStatus() ConnectionState
 }
 
 type ConnectionState struct {
@@ -28,7 +33,7 @@ type ConnWrapper struct {
 	session quic.Session
 }
 
-func From(stream quic.Stream, session quic.Session) Conn {
+func FromQuic(stream quic.Stream, session quic.Session) QuicConn {
 	return &ConnWrapper{
 		QuicStream: stream,
 		session:    session,

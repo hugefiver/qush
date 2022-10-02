@@ -1,0 +1,3 @@
+[submodule "quic"]
+	path = quic
+	url = https://github.com/hugefiver/quic-go.git
