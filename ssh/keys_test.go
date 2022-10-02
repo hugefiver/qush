@@ -21,7 +21,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hugefiver/qush/ssh/testdata"
+	"github.com/hugefiver/fakessh/third/ssh/testdata"
 	"golang.org/x/crypto/ed25519"
 )
 
@@ -145,7 +145,7 @@ func TestKeySignWithAlgorithmVerify(t *testing.T) {
 
 			// RSA keys are the only ones which currently support more than one signing algorithm
 			if pub.Type() == KeyAlgoRSA {
-				for _, algorithm := range []string{SigAlgoRSA, SigAlgoRSASHA2256, SigAlgoRSASHA2512} {
+				for _, algorithm := range []string{KeyAlgoRSA, KeyAlgoRSASHA256, KeyAlgoRSASHA512} {
 					signWithAlgTestCase(algorithm, algorithm)
 				}
 			}

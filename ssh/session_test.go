@@ -11,12 +11,11 @@ import (
 	crypto_rand "crypto/rand"
 	"errors"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"net"
 	"testing"
 
-	"github.com/hugefiver/qush/ssh/terminal"
+	"github.com/hugefiver/fakessh/third/ssh/terminal"
 )
 
 type serverType func(Channel, <-chan *Request, *testing.T)
@@ -531,7 +530,7 @@ func sendSignal(signal string, ch Channel, t *testing.T) {
 
 func discardHandler(ch Channel, t *testing.T) {
 	defer ch.Close()
-	io.Copy(ioutil.Discard, ch)
+	io.Copy(io.Discard, ch)
 }
 
 func echoHandler(ch Channel, in <-chan *Request, t *testing.T) {
@@ -606,7 +605,7 @@ func TestClientWriteEOF(t *testing.T) {
 	}
 	stdin.Close()
 
-	res, err := ioutil.ReadAll(stdout)
+	res, err := io.ReadAll(stdout)
 	if err != nil {
 		t.Fatalf("Read failed: %v", err)
 	}
@@ -618,7 +617,7 @@ func TestClientWriteEOF(t *testing.T) {
 
 func simpleEchoHandler(ch Channel, in <-chan *Request, t *testing.T) {
 	defer ch.Close()
-	data, err := ioutil.ReadAll(ch)
+	data, err := io.ReadAll(ch)
 	if err != nil {
 		t.Errorf("handler read error: %v", err)
 	}
@@ -758,6 +757,12 @@ func TestHostKeyAlgorithms(t *testing.T) {
 
 	// Client asks for RSA explicitly.
 	clientConf.HostKeyAlgorithms = []string{KeyAlgoRSA}
+	connect(clientConf, KeyAlgoRSA)
+
+	// Client asks for RSA-SHA2-512 explicitly.
+	clientConf.HostKeyAlgorithms = []string{KeyAlgoRSASHA512}
+	// We get back an "ssh-rsa" key but the verification happened
+	// with an RSA-SHA2-512 signature.
 	connect(clientConf, KeyAlgoRSA)
 
 	c1, c2, err := netPipe()

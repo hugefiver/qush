@@ -21,7 +21,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/hugefiver/qush/ssh"
+	"github.com/hugefiver/fakessh/third/ssh"
 )
 
 // See the sshd manpage

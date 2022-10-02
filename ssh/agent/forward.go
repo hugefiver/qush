@@ -10,7 +10,7 @@ import (
 	"net"
 	"sync"
 
-	"github.com/hugefiver/qush/ssh"
+	"github.com/hugefiver/fakessh/third/ssh"
 )
 
 // RequestAgentForwarding sets up agent forwarding for the session.

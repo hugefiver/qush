@@ -116,7 +116,7 @@ func newHandshakeTransport(conn keyingTransport, config *Config, clientVersion, 
 	t.resetWriteThresholds()
 
 	// We always start with a mandatory key exchange.
-	//t.requestKex <- struct{}{}
+	t.requestKex <- struct{}{}
 	return t
 }
 
@@ -132,7 +132,7 @@ func newClientTransport(conn keyingTransport, clientVersion, serverVersion []byt
 		t.hostKeyAlgorithms = supportedHostKeyAlgos
 	}
 	go t.readLoop()
-	//go t.kexLoop()
+	go t.kexLoop()
 	return t
 }
 
@@ -140,7 +140,7 @@ func newServerTransport(conn keyingTransport, clientVersion, serverVersion []byt
 	t := newHandshakeTransport(conn, &config.Config, clientVersion, serverVersion)
 	t.hostKeys = config.hostKeys
 	go t.readLoop()
-	//go t.kexLoop()
+	go t.kexLoop()
 	return t
 }
 
@@ -151,15 +151,13 @@ func (t *handshakeTransport) getSessionID() []byte {
 // waitSession waits for the session to be established. This should be
 // the first thing to call after instantiating handshakeTransport.
 func (t *handshakeTransport) waitSession() error {
-	_, err := t.readPacket()
+	p, err := t.readPacket()
 	if err != nil {
 		return err
 	}
-
-	// no key exchange
-	//if p[0] != msgNewKeys {
-	//	return fmt.Errorf("ssh: first packet should be msgNewKeys")
-	//}
+	if p[0] != msgNewKeys {
+		return fmt.Errorf("ssh: first packet should be msgNewKeys")
+	}
 
 	return nil
 }
@@ -394,48 +392,44 @@ func (t *handshakeTransport) readOnePacket(first bool) ([]byte, error) {
 		t.printPacket(p, false)
 	}
 
-	//if first && p[0] != msgKexInit {
-	//	return nil, fmt.Errorf("ssh: first packet should be msgKexInit")
-	//}
+	if first && p[0] != msgKexInit {
+		return nil, fmt.Errorf("ssh: first packet should be msgKexInit")
+	}
 
 	if p[0] != msgKexInit {
 		return p, nil
 	}
 
-	return []byte{msgNewKeys}, nil
+	firstKex := t.sessionID == nil
 
-	// no key exchange
+	kex := pendingKex{
+		done:      make(chan error, 1),
+		otherInit: p,
+	}
+	t.startKex <- &kex
+	err = <-kex.done
 
-	//firstKex := t.sessionID == nil
-	//
-	//kex := pendingKex{
-	//	done:      make(chan error, 1),
-	//	otherInit: p,
-	//}
-	//t.startKex <- &kex
-	//err = <-kex.done
-	//
-	//if debugHandshake {
-	//	log.Printf("%s exited key exchange (first %v), err %v", t.id(), firstKex, err)
-	//}
-	//
-	//if err != nil {
-	//	return nil, err
-	//}
-	//
-	//t.resetReadThresholds()
-	//
-	//// By default, a key exchange is hidden from higher layers by
-	//// translating it into msgIgnore.
-	//successPacket := []byte{msgIgnore}
-	//if firstKex {
-	//	// sendKexInit() for the first kex waits for
-	//	// msgNewKeys so the authentication process is
-	//	// guaranteed to happen over an encrypted transport.
-	//	successPacket = []byte{msgNewKeys}
-	//}
-	//
-	//return successPacket, nil
+	if debugHandshake {
+		log.Printf("%s exited key exchange (first %v), err %v", t.id(), firstKex, err)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	t.resetReadThresholds()
+
+	// By default, a key exchange is hidden from higher layers by
+	// translating it into msgIgnore.
+	successPacket := []byte{msgIgnore}
+	if firstKex {
+		// sendKexInit() for the first kex waits for
+		// msgNewKeys so the authentication process is
+		// guaranteed to happen over an encrypted transport.
+		successPacket = []byte{msgNewKeys}
+	}
+
+	return successPacket, nil
 }
 
 // sendKexInit sends a key change message.
@@ -461,14 +455,38 @@ func (t *handshakeTransport) sendKexInit() error {
 	}
 	io.ReadFull(rand.Reader, msg.Cookie[:])
 
-	if len(t.hostKeys) > 0 {
+	isServer := len(t.hostKeys) > 0
+	if isServer {
 		for _, k := range t.hostKeys {
-			msg.ServerHostKeyAlgos = append(
-				msg.ServerHostKeyAlgos, k.PublicKey().Type())
+			// If k is an AlgorithmSigner, presume it supports all signature algorithms
+			// associated with the key format. (Ideally AlgorithmSigner would have a
+			// method to advertise supported algorithms, but it doesn't. This means that
+			// adding support for a new algorithm is a breaking change, as we will
+			// immediately negotiate it even if existing implementations don't support
+			// it. If that ever happens, we'll have to figure something out.)
+			// If k is not an AlgorithmSigner, we can only assume it only supports the
+			// algorithms that matches the key format. (This means that Sign can't pick
+			// a different default.)
+			keyFormat := k.PublicKey().Type()
+			if _, ok := k.(AlgorithmSigner); ok {
+				msg.ServerHostKeyAlgos = append(msg.ServerHostKeyAlgos, algorithmsForKeyFormat(keyFormat)...)
+			} else {
+				msg.ServerHostKeyAlgos = append(msg.ServerHostKeyAlgos, keyFormat)
+			}
 		}
 	} else {
 		msg.ServerHostKeyAlgos = t.hostKeyAlgorithms
+
+		// As a client we opt in to receiving SSH_MSG_EXT_INFO so we know what
+		// algorithms the server supports for public key authentication. See RFC
+		// 8308, Section 2.1.
+		if firstKeyExchange := t.sessionID == nil; firstKeyExchange {
+			msg.KexAlgos = make([]string, 0, len(t.config.KeyExchanges)+1)
+			msg.KexAlgos = append(msg.KexAlgos, t.config.KeyExchanges...)
+			msg.KexAlgos = append(msg.KexAlgos, "ext-info-c")
+		}
 	}
+
 	packet := Marshal(msg)
 
 	// writePacket destroys the contents, so save a copy.
@@ -499,25 +517,24 @@ func (t *handshakeTransport) writePacket(p []byte) error {
 		return t.writeError
 	}
 
-	// no key exchange
-	//if t.sentInitMsg != nil {
-	//	// Copy the packet so the writer can reuse the buffer.
-	//	cp := make([]byte, len(p))
-	//	copy(cp, p)
-	//	t.pendingPackets = append(t.pendingPackets, cp)
-	//	return nil
-	//}
+	if t.sentInitMsg != nil {
+		// Copy the packet so the writer can reuse the buffer.
+		cp := make([]byte, len(p))
+		copy(cp, p)
+		t.pendingPackets = append(t.pendingPackets, cp)
+		return nil
+	}
 
 	if t.writeBytesLeft > 0 {
 		t.writeBytesLeft -= int64(len(p))
 	} else {
-		//t.requestKeyExchange()
+		t.requestKeyExchange()
 	}
 
 	if t.writePacketsLeft > 0 {
 		t.writePacketsLeft--
 	} else {
-		//t.requestKeyExchange()
+		t.requestKeyExchange()
 	}
 
 	if err := t.pushPacket(p); err != nil {
@@ -589,9 +606,9 @@ func (t *handshakeTransport) enterKeyExchange(otherInitPacket []byte) error {
 
 	var result *kexResult
 	if len(t.hostKeys) > 0 {
-		result, err = t.server(kex, t.algorithms, &magics)
+		result, err = t.server(kex, &magics)
 	} else {
-		result, err = t.client(kex, t.algorithms, &magics)
+		result, err = t.client(kex, &magics)
 	}
 
 	if err != nil {
@@ -618,19 +635,52 @@ func (t *handshakeTransport) enterKeyExchange(otherInitPacket []byte) error {
 	return nil
 }
 
-func (t *handshakeTransport) server(kex kexAlgorithm, algs *algorithms, magics *handshakeMagics) (*kexResult, error) {
-	var hostKey Signer
-	for _, k := range t.hostKeys {
-		if algs.hostKey == k.PublicKey().Type() {
-			hostKey = k
+// algorithmSignerWrapper is an AlgorithmSigner that only supports the default
+// key format algorithm.
+//
+// This is technically a violation of the AlgorithmSigner interface, but it
+// should be unreachable given where we use this. Anyway, at least it returns an
+// error instead of panicing or producing an incorrect signature.
+type algorithmSignerWrapper struct {
+	Signer
+}
+
+func (a algorithmSignerWrapper) SignWithAlgorithm(rand io.Reader, data []byte, algorithm string) (*Signature, error) {
+	if algorithm != underlyingAlgo(a.PublicKey().Type()) {
+		return nil, errors.New("ssh: internal error: algorithmSignerWrapper invoked with non-default algorithm")
+	}
+	return a.Sign(rand, data)
+}
+
+func pickHostKey(hostKeys []Signer, algo string) AlgorithmSigner {
+	for _, k := range hostKeys {
+		if algo == k.PublicKey().Type() {
+			return algorithmSignerWrapper{k}
+		}
+		k, ok := k.(AlgorithmSigner)
+		if !ok {
+			continue
+		}
+		for _, a := range algorithmsForKeyFormat(k.PublicKey().Type()) {
+			if algo == a {
+				return k
+			}
 		}
 	}
+	return nil
+}
 
-	r, err := kex.Server(t.conn, t.config.Rand, magics, hostKey)
+func (t *handshakeTransport) server(kex kexAlgorithm, magics *handshakeMagics) (*kexResult, error) {
+	hostKey := pickHostKey(t.hostKeys, t.algorithms.hostKey)
+	if hostKey == nil {
+		return nil, errors.New("ssh: internal error: negotiated unsupported signature type")
+	}
+
+	r, err := kex.Server(t.conn, t.config.Rand, magics, hostKey, t.algorithms.hostKey)
 	return r, err
 }
 
-func (t *handshakeTransport) client(kex kexAlgorithm, algs *algorithms, magics *handshakeMagics) (*kexResult, error) {
+func (t *handshakeTransport) client(kex kexAlgorithm, magics *handshakeMagics) (*kexResult, error) {
 	result, err := kex.Client(t.conn, t.config.Rand, magics)
 	if err != nil {
 		return nil, err
@@ -641,7 +691,7 @@ func (t *handshakeTransport) client(kex kexAlgorithm, algs *algorithms, magics *
 		return nil, err
 	}
 
-	if err := verifyHostKeySignature(hostKey, result); err != nil {
+	if err := verifyHostKeySignature(hostKey, t.algorithms.hostKey, result); err != nil {
 		return nil, err
 	}
 

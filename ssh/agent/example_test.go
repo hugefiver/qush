@@ -9,8 +9,8 @@ import (
 	"net"
 	"os"
 
-	"github.com/hugefiver/qush/agent"
-	"github.com/hugefiver/qush/ssh"
+	"github.com/hugefiver/fakessh/third/ssh"
+	"github.com/hugefiver/fakessh/third/ssh/agent"
 )
 
 func ExampleNewClient() {

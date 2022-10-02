@@ -12,8 +12,8 @@ import (
 	"crypto/rand"
 	"fmt"
 
-	"github.com/hugefiver/qush/ssh"
-	"github.com/hugefiver/qush/ssh/testdata"
+	"github.com/hugefiver/fakessh/third/ssh"
+	"github.com/hugefiver/fakessh/third/ssh/testdata"
 )
 
 var (

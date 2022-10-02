@@ -3,5 +3,5 @@
 // license that can be found in the LICENSE file.
 
 // Package test contains integration tests for the
-// github.com/hugefiver/qush/ssh package.
-package test // import "golang.org/x/crypto/ssh/test"
+// github.com/hugefiver/fakessh/third/ssh package.
+package test // import "github.com/hugefiver/fakessh/third/ssh/test"

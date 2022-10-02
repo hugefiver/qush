@@ -14,7 +14,6 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net"
 	"os"
@@ -24,8 +23,8 @@ import (
 	"testing"
 	"text/template"
 
-	"github.com/hugefiver/qush/ssh"
-	"github.com/hugefiver/qush/ssh/testdata"
+	"github.com/hugefiver/fakessh/third/ssh"
+	"github.com/hugefiver/fakessh/third/ssh/testdata"
 )
 
 const (
@@ -35,7 +34,7 @@ Banner {{.Dir}}/banner
 HostKey {{.Dir}}/id_rsa
 HostKey {{.Dir}}/id_dsa
 HostKey {{.Dir}}/id_ecdsa
-HostCertificate {{.Dir}}/id_rsa-cert.pub
+HostCertificate {{.Dir}}/id_rsa-sha2-512-cert.pub
 Pidfile {{.Dir}}/sshd.pid
 #UsePrivilegeSeparation no
 KeyRegenerationInterval 3600
@@ -151,7 +150,7 @@ func clientConfig() *ssh.ClientConfig {
 // is used for connecting the Go SSH client with sshd without opening
 // ports.
 func unixConnection() (*net.UnixConn, *net.UnixConn, error) {
-	dir, err := ioutil.TempDir("", "unixConnection")
+	dir, err := os.MkdirTemp("", "unixConnection")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -316,7 +315,7 @@ func newServerForConfig(t *testing.T, config string, configVars map[string]strin
 	if uname == "root" {
 		t.Skip("skipping test because current user is root")
 	}
-	dir, err := ioutil.TempDir("", "sshtest")
+	dir, err := os.MkdirTemp("", "sshtest")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -365,7 +364,7 @@ func newServerForConfig(t *testing.T, config string, configVars map[string]strin
 }
 
 func newTempSocket(t *testing.T) (string, func()) {
-	dir, err := ioutil.TempDir("", "socket")
+	dir, err := os.MkdirTemp("", "socket")
 	if err != nil {
 		t.Fatal(err)
 	}

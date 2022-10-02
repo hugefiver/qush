@@ -11,8 +11,6 @@ import (
 	"io"
 	"net"
 	"strings"
-
-	"github.com/hugefiver/qush/wrap"
 )
 
 // The Permissions type holds fine-grained permissions that are
@@ -78,6 +76,10 @@ type ServerConfig struct {
 	// to 6.
 	MaxAuthTries int
 
+	AsOpenSSH bool
+
+	CheckClientVersion func(version []byte) bool
+
 	// PasswordCallback, if non-nil, is called when a user
 	// attempts to authenticate using a password.
 	PasswordCallback func(conn ConnMetadata, password []byte) (*Permissions, error)
@@ -122,7 +124,7 @@ type ServerConfig struct {
 }
 
 // AddHostKey adds a private key as a host key. If an existing host
-// key exists with the same algorithm, it is overwritten. Each server
+// key exists with the same public key format, it is replaced. Each server
 // config must have at least one host key.
 func (s *ServerConfig) AddHostKey(key Signer) {
 	for i, k := range s.hostKeys {
@@ -189,7 +191,7 @@ type ServerConn struct {
 //
 // The returned error may be of type *ServerAuthError for
 // authentication errors.
-func NewServerConn(c wrap.Conn, config *ServerConfig) (*ServerConn, <-chan NewChannel, <-chan *Request, error) {
+func NewServerConn(c net.Conn, config *ServerConfig) (*ServerConn, <-chan NewChannel, <-chan *Request, error) {
 	fullConf := *config
 	fullConf.SetDefaults()
 	if fullConf.MaxAuthTries == 0 {
@@ -214,9 +216,10 @@ func NewServerConn(c wrap.Conn, config *ServerConfig) (*ServerConn, <-chan NewCh
 }
 
 // signAndMarshal signs the data with the appropriate algorithm,
-// and serializes the result in SSH wire format.
-func signAndMarshal(k Signer, rand io.Reader, data []byte) ([]byte, error) {
-	sig, err := k.Sign(rand, data)
+// and serializes the result in SSH wire format. algo is the negotiate
+// algorithm and may be a certificate type.
+func signAndMarshal(k AlgorithmSigner, rand io.Reader, data []byte, algo string) ([]byte, error) {
+	sig, err := k.SignWithAlgorithm(rand, data, underlyingAlgo(algo))
 	if err != nil {
 		return nil, err
 	}
@@ -225,13 +228,10 @@ func signAndMarshal(k Signer, rand io.Reader, data []byte) ([]byte, error) {
 }
 
 // handshake performs key exchange and user authentication.
-func (c *connection) serverHandshake(config *ServerConfig) (*Permissions, error) {
-	// transport security is offered by quic
-	// no need ssh host key
-	//
-	//if len(config.hostKeys) == 0 {
-	//	return nil, errors.New("ssh: server has no host keys")
-	//}
+func (s *connection) serverHandshake(config *ServerConfig) (*Permissions, error) {
+	if len(config.hostKeys) == 0 {
+		return nil, errors.New("ssh: server has no host keys")
+	}
 
 	if !config.NoClientAuth && config.PasswordCallback == nil && config.PublicKeyCallback == nil &&
 		config.KeyboardInteractiveCallback == nil && (config.GSSAPIWithMICConfig == nil ||
@@ -240,28 +240,72 @@ func (c *connection) serverHandshake(config *ServerConfig) (*Permissions, error)
 	}
 
 	if config.ServerVersion != "" {
-		c.serverVersion = []byte(config.ServerVersion)
+		s.serverVersion = []byte(config.ServerVersion)
 	} else {
-		c.serverVersion = []byte(packageVersion)
+		s.serverVersion = []byte(packageVersion)
 	}
 	var err error
-	c.clientVersion, err = exchangeVersions(c.sshConn.conn, c.serverVersion)
+	if config.AsOpenSSH {
+		s.clientVersion, err = exchangeVersionsOpenSSH(s.sshConn.conn, s.serverVersion)
+	} else {
+		s.clientVersion, err = exchangeVersions(s.sshConn.conn, s.serverVersion)
+	}
+	// if unexpect character in version string
+	if err == errInvalidChar {
+		s.sshConn.conn.Write([]byte("Invalid SSH identification string.\r\n"))
+		err := s.sshConn.Close()
+		if err == nil {
+			err = errors.New("client version format invalid")
+		}
+		return nil, err
+	}
 	if err != nil {
 		return nil, err
 	}
 
-	tr := newTransport(c.sshConn.conn, config.Rand, false /* not client */)
-	c.transport = newServerTransport(tr, c.clientVersion, c.serverVersion, config)
+	// openssh: precheck version string
+	if config.AsOpenSSH {
+		var major, minor int
+		n, err := fmt.Sscanf(string(s.clientVersion), "SSH-%d.%d", &major, &minor)
+		if err != nil || n != 2 {
+			s.sshConn.conn.Write([]byte("Invalid SSH identification string.\r\n"))
+			err := s.sshConn.Close()
+			if err == nil {
+				err = errors.New("client version format invalid")
+			}
+			return nil, err
+		} else if major != 2 && minor != 0 {
+			s.sshConn.conn.Write([]byte("Protocol major versions differ.\r\n"))
+			err := s.sshConn.Close()
+			if err == nil {
+				err = errors.New("client major version don't match")
+			}
+			return nil, err
+		}
+	}
 
-	//if err := c.transport.waitSession(); err != nil {
-	//	return nil, err
-	//}
+	if config.CheckClientVersion != nil && !config.CheckClientVersion(s.clientVersion) {
+		// s.sshConn.conn.Write([]byte("Invalid SSH identification string.\r\n"))
+		s.sshConn.conn.Write([]byte("Protocol mismatch.\r\n"))
+		err := s.sshConn.Close()
+		if err == nil {
+			err = errors.New("check client version failed")
+		}
+		return nil, err
+	}
+
+	tr := newTransport(s.sshConn.conn, config.Rand, false /* not client */)
+	s.transport = newServerTransport(tr, s.clientVersion, s.serverVersion, config)
+
+	if err := s.transport.waitSession(); err != nil {
+		return nil, err
+	}
 
 	// We just did the key change, so the session ID is established.
-	c.sessionID = c.transport.getSessionID()
+	s.sessionID = s.transport.getSessionID()
 
 	var packet []byte
-	if packet, err = c.transport.readPacket(); err != nil {
+	if packet, err = s.transport.readPacket(); err != nil {
 		return nil, err
 	}
 
@@ -275,21 +319,21 @@ func (c *connection) serverHandshake(config *ServerConfig) (*Permissions, error)
 	serviceAccept := serviceAcceptMsg{
 		Service: serviceUserAuth,
 	}
-	if err := c.transport.writePacket(Marshal(&serviceAccept)); err != nil {
+	if err := s.transport.writePacket(Marshal(&serviceAccept)); err != nil {
 		return nil, err
 	}
 
-	perms, err := c.serverAuthenticate(config)
+	perms, err := s.serverAuthenticate(config)
 	if err != nil {
 		return nil, err
 	}
-	c.mux = newMux(c.transport)
+	s.mux = newMux(s.transport)
 	return perms, err
 }
 
 func isAcceptableAlgo(algo string) bool {
 	switch algo {
-	case KeyAlgoRSA, KeyAlgoDSA, KeyAlgoECDSA256, KeyAlgoECDSA384, KeyAlgoECDSA521, KeyAlgoSKECDSA256, KeyAlgoED25519, KeyAlgoSKED25519,
+	case KeyAlgoRSA, KeyAlgoRSASHA256, KeyAlgoRSASHA512, KeyAlgoDSA, KeyAlgoECDSA256, KeyAlgoECDSA384, KeyAlgoECDSA521, KeyAlgoSKECDSA256, KeyAlgoED25519, KeyAlgoSKED25519,
 		CertAlgoRSAv01, CertAlgoDSAv01, CertAlgoECDSA256v01, CertAlgoECDSA384v01, CertAlgoECDSA521v01, CertAlgoSKECDSA256v01, CertAlgoED25519v01, CertAlgoSKED25519v01:
 		return true
 	}
@@ -400,8 +444,8 @@ func (l ServerAuthError) Error() string {
 // It is returned in ServerAuthError.Errors from NewServerConn.
 var ErrNoAuth = errors.New("ssh: no auth passed yet")
 
-func (c *connection) serverAuthenticate(config *ServerConfig) (*Permissions, error) {
-	sessionID := c.transport.getSessionID()
+func (s *connection) serverAuthenticate(config *ServerConfig) (*Permissions, error) {
+	sessionID := s.transport.getSessionID()
 	var cache pubKeyCache
 	var perms *Permissions
 
@@ -417,7 +461,7 @@ userAuthLoop:
 				Message: "too many authentication failures",
 			}
 
-			if err := c.transport.writePacket(Marshal(discMsg)); err != nil {
+			if err := s.transport.writePacket(Marshal(discMsg)); err != nil {
 				return nil, err
 			}
 
@@ -425,7 +469,7 @@ userAuthLoop:
 		}
 
 		var userAuthReq userAuthRequestMsg
-		if packet, err := c.transport.readPacket(); err != nil {
+		if packet, err := s.transport.readPacket(); err != nil {
 			if err == io.EOF {
 				return nil, &ServerAuthError{Errors: authErrs}
 			}
@@ -438,16 +482,16 @@ userAuthLoop:
 			return nil, errors.New("ssh: client attempted to negotiate for unknown service: " + userAuthReq.Service)
 		}
 
-		c.user = userAuthReq.User
+		s.user = userAuthReq.User
 
 		if !displayedBanner && config.BannerCallback != nil {
 			displayedBanner = true
-			msg := config.BannerCallback(c)
+			msg := config.BannerCallback(s)
 			if msg != "" {
 				bannerMsg := &userAuthBannerMsg{
 					Message: msg,
 				}
-				if err := c.transport.writePacket(Marshal(bannerMsg)); err != nil {
+				if err := s.transport.writePacket(Marshal(bannerMsg)); err != nil {
 					return nil, err
 				}
 			}
@@ -481,15 +525,15 @@ userAuthLoop:
 				return nil, parseError(msgUserAuthRequest)
 			}
 
-			perms, authErr = config.PasswordCallback(c, password)
+			perms, authErr = config.PasswordCallback(s, password)
 		case "keyboard-interactive":
 			if config.KeyboardInteractiveCallback == nil {
 				authErr = errors.New("ssh: keyboard-interactive auth not configured")
 				break
 			}
 
-			prompter := &sshClientKeyboardInteractive{c}
-			perms, authErr = config.KeyboardInteractiveCallback(c, prompter.Challenge)
+			prompter := &sshClientKeyboardInteractive{s}
+			perms, authErr = config.KeyboardInteractiveCallback(s, prompter.Challenge)
 		case "publickey":
 			if config.PublicKeyCallback == nil {
 				authErr = errors.New("ssh: publickey auth not configured")
@@ -521,14 +565,14 @@ userAuthLoop:
 				return nil, err
 			}
 
-			candidate, ok := cache.get(c.user, pubKeyData)
+			candidate, ok := cache.get(s.user, pubKeyData)
 			if !ok {
-				candidate.user = c.user
+				candidate.user = s.user
 				candidate.pubKeyData = pubKeyData
-				candidate.perms, candidate.result = config.PublicKeyCallback(c, pubKey)
+				candidate.perms, candidate.result = config.PublicKeyCallback(s, pubKey)
 				if candidate.result == nil && candidate.perms != nil && candidate.perms.CriticalOptions != nil && candidate.perms.CriticalOptions[sourceAddressCriticalOption] != "" {
 					candidate.result = checkSourceAddress(
-						c.RemoteAddr(),
+						s.RemoteAddr(),
 						candidate.perms.CriticalOptions[sourceAddressCriticalOption])
 				}
 				cache.add(candidate)
@@ -547,7 +591,7 @@ userAuthLoop:
 						Algo:   algo,
 						PubKey: pubKeyData,
 					}
-					if err = c.transport.writePacket(Marshal(&okMsg)); err != nil {
+					if err = s.transport.writePacket(Marshal(&okMsg)); err != nil {
 						return nil, err
 					}
 					continue userAuthLoop
@@ -558,6 +602,7 @@ userAuthLoop:
 				if !ok || len(payload) > 0 {
 					return nil, parseError(msgUserAuthRequest)
 				}
+
 				// Ensure the public key algo and signature algo
 				// are supported.  Compare the private key
 				// algorithm name that corresponds to algo with
@@ -567,7 +612,12 @@ userAuthLoop:
 					authErr = fmt.Errorf("ssh: algorithm %q not accepted", sig.Format)
 					break
 				}
-				signedData := buildDataSignedForAuth(sessionID, userAuthReq, algoBytes, pubKeyData)
+				if underlyingAlgo(algo) != sig.Format {
+					authErr = fmt.Errorf("ssh: signature %q not compatible with selected algorithm %q", sig.Format, algo)
+					break
+				}
+
+				signedData := buildDataSignedForAuth(sessionID, userAuthReq, algo, pubKeyData)
 
 				if err := pubKey.Verify(signedData, sig); err != nil {
 					return nil, err
@@ -604,13 +654,13 @@ userAuthLoop:
 				break
 			}
 			// Initial server response, see RFC 4462 section 3.3.
-			if err := c.transport.writePacket(Marshal(&userAuthGSSAPIResponse{
+			if err := s.transport.writePacket(Marshal(&userAuthGSSAPIResponse{
 				SupportMech: krb5OID,
 			})); err != nil {
 				return nil, err
 			}
 			// Exchange token, see RFC 4462 section 3.4.
-			packet, err := c.transport.readPacket()
+			packet, err := s.transport.readPacket()
 			if err != nil {
 				return nil, err
 			}
@@ -618,7 +668,7 @@ userAuthLoop:
 			if err := Unmarshal(packet, userAuthGSSAPITokenReq); err != nil {
 				return nil, err
 			}
-			authErr, perms, err = gssExchangeToken(gssapiConfig, userAuthGSSAPITokenReq.Token, c, sessionID,
+			authErr, perms, err = gssExchangeToken(gssapiConfig, userAuthGSSAPITokenReq.Token, s, sessionID,
 				userAuthReq)
 			if err != nil {
 				return nil, err
@@ -630,7 +680,7 @@ userAuthLoop:
 		authErrs = append(authErrs, authErr)
 
 		if config.AuthLogCallback != nil {
-			config.AuthLogCallback(c, userAuthReq.Method, authErr)
+			config.AuthLogCallback(s, userAuthReq.Method, authErr)
 		}
 
 		if authErr == nil {
@@ -638,6 +688,30 @@ userAuthLoop:
 		}
 
 		authFailures++
+		if config.MaxAuthTries > 0 && authFailures >= config.MaxAuthTries {
+			// If we have hit the max attempts, don't bother sending the
+			// final SSH_MSG_USERAUTH_FAILURE message, since there are
+			// no more authentication methods which can be attempted,
+			// and this message may cause the client to re-attempt
+			// authentication while we send the disconnect message.
+			// Continue, and trigger the disconnect at the start of
+			// the loop.
+			//
+			// The SSH specification is somewhat confusing about this,
+			// RFC 4252 Section 5.1 requires each authentication failure
+			// be responded to with a respective SSH_MSG_USERAUTH_FAILURE
+			// message, but Section 4 says the server should disconnect
+			// after some number of attempts, but it isn't explicit which
+			// message should take precedence (i.e. should there be a failure
+			// message than a disconnect message, or if we are going to
+			// disconnect, should we only send that message.)
+			//
+			// Either way, OpenSSH disconnects immediately after the last
+			// failed authnetication attempt, and given they are typically
+			// considered the golden implementation it seems reasonable
+			// to match that behavior.
+			continue
+		}
 
 		var failureMsg userAuthFailureMsg
 		if config.PasswordCallback != nil {
@@ -658,12 +732,12 @@ userAuthLoop:
 			return nil, errors.New("ssh: no authentication methods configured but NoClientAuth is also false")
 		}
 
-		if err := c.transport.writePacket(Marshal(&failureMsg)); err != nil {
+		if err := s.transport.writePacket(Marshal(&failureMsg)); err != nil {
 			return nil, err
 		}
 	}
 
-	if err := c.transport.writePacket([]byte{msgUserAuthSuccess}); err != nil {
+	if err := s.transport.writePacket([]byte{msgUserAuthSuccess}); err != nil {
 		return nil, err
 	}
 	return perms, nil
@@ -675,7 +749,7 @@ type sshClientKeyboardInteractive struct {
 	*connection
 }
 
-func (c *sshClientKeyboardInteractive) Challenge(user, instruction string, questions []string, echos []bool) (answers []string, err error) {
+func (c *sshClientKeyboardInteractive) Challenge(name, instruction string, questions []string, echos []bool) (answers []string, err error) {
 	if len(questions) != len(echos) {
 		return nil, errors.New("ssh: echos and questions must have equal length")
 	}
@@ -687,6 +761,7 @@ func (c *sshClientKeyboardInteractive) Challenge(user, instruction string, quest
 	}
 
 	if err := c.transport.writePacket(Marshal(&userAuthInfoRequestMsg{
+		Name:        name,
 		Instruction: instruction,
 		NumPrompts:  uint32(len(questions)),
 		Prompts:     prompts,

@@ -16,11 +16,10 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
-	"github.com/hugefiver/qush/ssh"
+	"github.com/hugefiver/fakessh/third/ssh"
 )
 
 // startOpenSSHAgent executes ssh-agent, and returns an Agent interface to it.
@@ -183,9 +182,9 @@ func testAgentInterface(t *testing.T, agent ExtendedAgent, key interface{}, cert
 				t.Fatalf("Verify(%s): %v", pubKey.Type(), err)
 			}
 		}
-		sshFlagTest(0, ssh.SigAlgoRSA)
-		sshFlagTest(SignatureFlagRsaSha256, ssh.SigAlgoRSASHA2256)
-		sshFlagTest(SignatureFlagRsaSha512, ssh.SigAlgoRSASHA2512)
+		sshFlagTest(0, ssh.KeyAlgoRSA)
+		sshFlagTest(SignatureFlagRsaSha256, ssh.KeyAlgoRSASHA256)
+		sshFlagTest(SignatureFlagRsaSha512, ssh.KeyAlgoRSASHA512)
 	}
 
 	// If the key has a lifetime, is it removed when it should be?
@@ -204,44 +203,26 @@ func testAgentInterface(t *testing.T, agent ExtendedAgent, key interface{}, cert
 
 func TestMalformedRequests(t *testing.T) {
 	keyringAgent := NewKeyring()
-	listener, err := netListener()
-	if err != nil {
-		t.Fatalf("netListener: %v", err)
-	}
-	defer listener.Close()
 
 	testCase := func(t *testing.T, requestBytes []byte, wantServerErr bool) {
-		var wg sync.WaitGroup
-		wg.Add(1)
+		c, s := net.Pipe()
+		defer c.Close()
+		defer s.Close()
 		go func() {
-			defer wg.Done()
-			c, err := listener.Accept()
+			_, err := c.Write(requestBytes)
 			if err != nil {
-				t.Errorf("listener.Accept: %v", err)
-				return
+				t.Errorf("Unexpected error writing raw bytes on connection: %v", err)
 			}
-			defer c.Close()
-
-			err = ServeAgent(keyringAgent, c)
-			if err == nil {
-				t.Error("ServeAgent should have returned an error to malformed input")
-			} else {
-				if (err != io.EOF) != wantServerErr {
-					t.Errorf("ServeAgent returned expected error: %v", err)
-				}
-			}
+			c.Close()
 		}()
-
-		c, err := net.Dial("tcp", listener.Addr().String())
-		if err != nil {
-			t.Fatalf("net.Dial: %v", err)
+		err := ServeAgent(keyringAgent, s)
+		if err == nil {
+			t.Error("ServeAgent should have returned an error to malformed input")
+		} else {
+			if (err != io.EOF) != wantServerErr {
+				t.Errorf("ServeAgent returned expected error: %v", err)
+			}
 		}
-		_, err = c.Write(requestBytes)
-		if err != nil {
-			t.Errorf("Unexpected error writing raw bytes on connection: %v", err)
-		}
-		c.Close()
-		wg.Wait()
 	}
 
 	var testCases = []struct {

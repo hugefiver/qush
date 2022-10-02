@@ -238,15 +238,19 @@ var (
 // (to setup server->client keys) or clientKeys (for client->server keys).
 func newPacketCipher(d direction, algs directionAlgorithms, kex *kexResult) (packetCipher, error) {
 	cipherMode := cipherModes[algs.Cipher]
-	macMode := macModes[algs.MAC]
 
 	iv := make([]byte, cipherMode.ivSize)
 	key := make([]byte, cipherMode.keySize)
-	macKey := make([]byte, macMode.keySize)
 
 	generateKeyMaterial(iv, d.ivTag, kex)
 	generateKeyMaterial(key, d.keyTag, kex)
-	generateKeyMaterial(macKey, d.macKeyTag, kex)
+
+	var macKey []byte
+	if !aeadCiphers[algs.Cipher] {
+		macMode := macModes[algs.MAC]
+		macKey = make([]byte, macMode.keySize)
+		generateKeyMaterial(macKey, d.macKeyTag, kex)
+	}
 
 	return cipherModes[algs.Cipher].create(key, iv, macKey, algs)
 }
@@ -278,7 +282,7 @@ func generateKeyMaterial(out, tag []byte, r *kexResult) {
 	}
 }
 
-const packageVersion = "QUSH-0.0.0"
+const packageVersion = "SSH-2.0-Go"
 
 // Sends and receives a version line.  The versionLine string should
 // be US ASCII, start with "SSH-2.0-", and should not include a
@@ -302,6 +306,25 @@ func exchangeVersions(rw io.ReadWriter, versionLine []byte) (them []byte, err er
 	return them, err
 }
 
+func exchangeVersionsOpenSSH(rw io.ReadWriter, versionLine []byte) (them []byte, err error) {
+	// Contrary to the RFC, we do not ignore lines that don't
+	// start with "SSH-2.0-" to make the library usable with
+	// nonconforming servers.
+	for _, c := range versionLine {
+		// The spec disallows non US-ASCII chars, and
+		// specifically forbids null chars.
+		if c < 32 {
+			return nil, errors.New("ssh: junk character in version line")
+		}
+	}
+	if _, err = rw.Write(append(versionLine, '\r', '\n')); err != nil {
+		return
+	}
+
+	them, err = readVersionOpenSSH(rw)
+	return them, err
+}
+
 // maxVersionStringBytes is the maximum number of bytes that we'll
 // accept as a version string. RFC 4253 section 4.2 limits this at 255
 // chars
@@ -321,7 +344,7 @@ func readVersion(r io.Reader) ([]byte, error) {
 		// The RFC says that the version should be terminated with \r\n
 		// but several SSH servers actually only send a \n.
 		if buf[0] == '\n' {
-			if !bytes.HasPrefix(versionString, []byte("QUSH-")) {
+			if !bytes.HasPrefix(versionString, []byte("SSH-")) {
 				// RFC 4253 says we need to ignore all version string lines
 				// except the one containing the SSH version (provided that
 				// all the lines do not exceed 255 bytes in total).
@@ -349,5 +372,69 @@ func readVersion(r io.Reader) ([]byte, error) {
 	if len(versionString) > 0 && versionString[len(versionString)-1] == '\r' {
 		versionString = versionString[:len(versionString)-1]
 	}
+	return versionString, nil
+}
+
+var errInvalidChar = errors.New("invalid character in version string")
+
+func readVersionOpenSSH(rw io.ReadWriter) ([]byte, error) {
+	versionString := make([]byte, 0, 64)
+	var ok bool
+	var buf [1]byte
+
+	bannerLines := 0
+
+	for {
+		var lastCR bool
+
+		versionString = versionString[:0]
+
+	loop:
+		for length := 0; length < maxVersionStringBytes; length++ {
+			_, err := io.ReadFull(rw, buf[:])
+			if err != nil {
+				return nil, err
+			}
+
+			switch buf[0] {
+			case '\r':
+				if !lastCR {
+					lastCR = true
+					continue loop
+				}
+			case '\n':
+				bannerLines += 1
+				ok = true
+				break loop
+			}
+
+			if buf[0] < 32 {
+				return nil, errInvalidChar
+			}
+
+			// if last char is '\r', it's not allowed
+			if lastCR {
+				rw.Write([]byte("Protocol mismatch.\r\n"))
+				return nil, errors.New("ssh: unexpected CR")
+			}
+			lastCR = false
+
+			versionString = append(versionString, buf[0])
+		}
+
+		if bytes.HasPrefix(versionString, []byte("SSH-")) && bannerLines <= 1 {
+			break
+		} else if bannerLines <= 1 {
+			continue
+		} else {
+			rw.Write([]byte("Protocol mismatch.\r\n"))
+			return nil, errors.New("ssh: cannot read client version")
+		}
+	}
+
+	if !ok {
+		return nil, errors.New("ssh: overflow reading version string")
+	}
+
 	return versionString, nil
 }

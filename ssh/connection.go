@@ -7,8 +7,6 @@ package ssh
 import (
 	"fmt"
 	"net"
-
-	"github.com/hugefiver/qush/wrap"
 )
 
 // OpenChannelError is returned if the other side rejects an
@@ -99,12 +97,10 @@ func (c *connection) Close() error {
 	return c.sshConn.conn.Close()
 }
 
-// //sshconn provides net.Conn metadata, but disallows direct reads and
-// //writes.
-//cause the transport is offered by quic
-//net.Conn is replaced by a wrapper of quic.Stream
+// sshconn provides net.Conn metadata, but disallows direct reads and
+// writes.
 type sshConn struct {
-	conn wrap.Conn
+	conn net.Conn
 
 	user          string
 	sessionID     []byte

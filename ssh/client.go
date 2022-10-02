@@ -6,15 +6,12 @@ package ssh
 
 import (
 	"bytes"
-	"crypto"
 	"errors"
 	"fmt"
 	"net"
 	"os"
 	"sync"
 	"time"
-
-	"github.com/hugefiver/qush/wrap"
 )
 
 // Client implements a traditional SSH client that supports shells,
@@ -71,7 +68,7 @@ func NewClient(c Conn, chans <-chan NewChannel, reqs <-chan *Request) *Client {
 // NewClientConn establishes an authenticated SSH connection using c
 // as the underlying transport.  The Request and NewChannel channels
 // must be serviced or the connection will hang.
-func NewClientConn(c wrap.Conn, addr string, config *ClientConfig) (Conn, <-chan NewChannel, <-chan *Request, error) {
+func NewClientConn(c net.Conn, addr string, config *ClientConfig) (Conn, <-chan NewChannel, <-chan *Request, error) {
 	fullConf := *config
 	fullConf.SetDefaults()
 	if fullConf.HostKeyCallback == nil {
@@ -80,7 +77,7 @@ func NewClientConn(c wrap.Conn, addr string, config *ClientConfig) (Conn, <-chan
 	}
 
 	conn := &connection{
-		sshConn: sshConn{conn: c},
+		sshConn: sshConn{conn: c, user: fullConf.User},
 	}
 
 	if err := conn.clientHandshake(addr, &fullConf); err != nil {
@@ -108,18 +105,7 @@ func (c *connection) clientHandshake(dialAddress string, config *ClientConfig) e
 	c.transport = newClientTransport(
 		newTransport(c.sshConn.conn, config.Rand, true /* is client */),
 		c.clientVersion, c.serverVersion, config, dialAddress, c.sshConn.RemoteAddr())
-	//if err := c.transport.waitSession(); err != nil {
-	//	return err
-	//}
-
-	// check server public key
-	certs := c.sshConn.conn.ConnectionStatus().PeerCertificates
-	if len(certs) == 0 {
-		return errors.New("ssh: server certs cannot be empty")
-	}
-	cert := certs[0]
-	ok, err := checkHostKey(c.transport, cert.PublicKey)
-	if !ok {
+	if err := c.transport.waitSession(); err != nil {
 		return err
 	}
 
@@ -127,26 +113,16 @@ func (c *connection) clientHandshake(dialAddress string, config *ClientConfig) e
 	return c.clientAuthenticate(config)
 }
 
-func checkHostKey(t *handshakeTransport, key crypto.PublicKey) (bool, error) {
-	p, err := NewPublicKey(key)
-	if err != nil {
-		return false, err
-	}
-
-	err = t.hostKeyCallback(t.dialAddress, t.remoteAddr, p)
-	if err != nil {
-		return false, err
-	}
-
-	return true, nil
-}
-
-// verifyHostKeySignature verifies the host key obtained in the key
-// exchange.
-func verifyHostKeySignature(hostKey PublicKey, result *kexResult) error {
+// verifyHostKeySignature verifies the host key obtained in the key exchange.
+// algo is the negotiated algorithm, and may be a certificate type.
+func verifyHostKeySignature(hostKey PublicKey, algo string, result *kexResult) error {
 	sig, rest, ok := parseSignatureBody(result.Signature)
 	if len(rest) > 0 || !ok {
 		return errors.New("ssh: signature parse error")
+	}
+
+	if a := underlyingAlgo(algo); sig.Format != a {
+		return fmt.Errorf("ssh: invalid signature algorithm %q, expected %q", sig.Format, a)
 	}
 
 	return hostKey.Verify(result.H, sig)
@@ -198,19 +174,15 @@ func (c *Client) handleChannelOpens(in <-chan NewChannel) {
 // to incoming channels and requests, use net.Dial with NewClientConn
 // instead.
 func Dial(network, addr string, config *ClientConfig) (*Client, error) {
-	//conn, err := net.DialTimeout(network, addr, config.Timeout)
-	//if err != nil {
-	//	return nil, err
-	//}
-	//c, chans, reqs, err := NewClientConn(conn, addr, config)
-	//if err != nil {
-	//	return nil, err
-	//}
-	//return NewClient(c, chans, reqs), nil
-
-	// TODO
-	// replace net.Conn with quic
-	return nil, errors.New("not implemented")
+	conn, err := net.DialTimeout(network, addr, config.Timeout)
+	if err != nil {
+		return nil, err
+	}
+	c, chans, reqs, err := NewClientConn(conn, addr, config)
+	if err != nil {
+		return nil, err
+	}
+	return NewClient(c, chans, reqs), nil
 }
 
 // HostKeyCallback is the function type used for verifying server
@@ -256,11 +228,11 @@ type ClientConfig struct {
 	// be used for the connection. If empty, a reasonable default is used.
 	ClientVersion string
 
-	// HostKeyAlgorithms lists the key types that the client will
-	// accept from the server as host key, in order of
+	// HostKeyAlgorithms lists the public key algorithms that the client will
+	// accept from the server for host key authentication, in order of
 	// preference. If empty, a reasonable default is used. Any
-	// string returned from PublicKey.Type method may be used, or
-	// any of the CertAlgoXxxx and KeyAlgoXxxx constants.
+	// string returned from a PublicKey.Type method may be used, or
+	// any of the CertAlgo and KeyAlgo constants.
 	HostKeyAlgorithms []string
 
 	// Timeout is the maximum amount of time for the TCP connection to establish.

@@ -24,7 +24,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hugefiver/qush/ssh"
+	"github.com/hugefiver/fakessh/third/ssh"
 )
 
 // test cases
